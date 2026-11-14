@@ -74,16 +74,6 @@ class RunpodProvider(Provider):
             if exception.status_code != 404:
                 raise
 
-    def discover(self, gpu_id: UUID) -> list[Instance]:
-        """Find exact GPU-name matches across all standalone Pods."""
-
-        pod_name = f"galloc-{gpu_id}"
-        return [
-            self._to_instance(pod)
-            for pod in self._api_client.get_pod_list()
-            if pod.name == pod_name and pod.status != "TERMINATED"
-        ]
-
     def get_region_list(self, gpu: str | None = None) -> list[Region]:
         """List native data centers, optionally restricted to the selected GPU's capacity."""
 

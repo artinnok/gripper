@@ -26,10 +26,6 @@ class Provider(ABC):
         """Confirm deletion of the instance and resources created with it."""
 
     @abstractmethod
-    def discover(self, gpu_id: UUID) -> list[Instance]:
-        """Find all instances created for one GPU during recovery."""
-
-    @abstractmethod
     def get_region_list(self, gpu: str | None = None) -> list[Region]:
         """List native regions, limited to available capacity when a GPU is supplied."""
 
