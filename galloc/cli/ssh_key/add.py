@@ -2,9 +2,9 @@ from pathlib import Path
 
 import click
 
+from galloc.core.ssh_keys import read_public_key
 from galloc.providers.factory import PROVIDER_NAME_LIST, open_provider
 from galloc.settings import Settings
-from galloc.ssh_keys import read_public_key
 from galloc.terminal.ssh_keys import print_ssh_key_creation
 
 

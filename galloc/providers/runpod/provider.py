@@ -4,10 +4,10 @@ from uuid import UUID
 from galloc.api_clients.exceptions import APIRequestFailed
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.api_clients.runpod.schemas import GPUType, Pod
+from galloc.core.ssh_keys import SSHKey, parse_public_key
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable, InvalidGPU, InvalidRegion
 from galloc.providers.runpod.schemas import GPUModel, Instance, InstanceStatus, Region
-from galloc.ssh_keys import SSHKey, parse_public_key
 
 
 POD_STATUS_MAP = {

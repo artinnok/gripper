@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from uuid import UUID
 
+from galloc.core.ssh_keys import SSHKey
 from galloc.providers.runpod.schemas import GPUModel, Instance, Region
-from galloc.ssh_keys import SSHKey
 
 
 class Provider(ABC):

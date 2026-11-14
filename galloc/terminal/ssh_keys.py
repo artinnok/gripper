@@ -2,7 +2,7 @@ import json
 
 import click
 
-from galloc.ssh_keys import SSHKey
+from galloc.core.ssh_keys import SSHKey
 
 
 def print_ssh_key_list(ssh_key_list: list[SSHKey], output: str) -> None:
