@@ -1,0 +1,108 @@
+import json
+from datetime import timedelta
+from decimal import Decimal
+
+import click
+
+from galloc.core.pricing import calculate_cost
+from galloc.core.schemas import GPU, Creation
+from galloc.providers.runpod.schemas import Instance
+
+
+NAME_COLUMN_WIDTH = 12
+PROVIDER_COLUMN_WIDTH = 10
+STATUS_COLUMN_WIDTH = 12
+
+
+def print_creation_estimate(creation: Creation, budget: str | None) -> None:
+    """Show the in-memory cost estimate before a billable request."""
+
+    cost = calculate_cost(creation.duration, creation.hourly_price)
+    estimate = f"Compute  ~${cost:.2f} · ${creation.hourly_price:.2f}/h · {_format_duration(creation.duration)}"
+    if budget is not None:
+        estimate += f" · budget ${Decimal(budget):f}"
+    click.echo(f"\n{estimate}", err=True)
+    click.echo("Estimate only; disk/tax extra. Auto-delete off; no spending cap.", err=True)
+
+
+def _format_duration(duration: timedelta) -> str:
+    """Display a whole-minute TTL using the same units as CLI input."""
+
+    days, minutes = divmod(int(duration.total_seconds()) // 60, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+    return " ".join(f"{value}{unit}" for value, unit in [(days, "d"), (hours, "h"), (minutes, "m")] if value)
+
+
+def print_created_gpu(gpu: GPU, output: str, instance: Instance) -> None:
+    """Show a compact ready result and the commands needed to use and remove it."""
+
+    if output == "json":
+        print_gpu(gpu, output, instance)
+    else:
+        click.echo()
+        click.echo(f"{'NAME':12}  {'STATUS':10}  {'REGION':12}  TTL ENDS (UTC)")
+        click.echo(f"{gpu.name:12}  {instance.status:10}  {instance.region or '-':12}  {gpu.expires_at:%Y-%m-%d %H:%M}")
+        click.echo(f"\nSSH     {instance.ssh_command}")
+    click.echo(f"Delete  galloc rm {gpu.name}", err=True)
+
+
+def print_removal(gpu: GPU, output: str) -> None:
+    """Confirm removal without returning an instance or keeping a history entry."""
+
+    if output == "json":
+        click.echo(json.dumps({"name": gpu.name, "removed": True}))
+        return
+    click.echo(gpu.name)
+
+
+def print_gpu(gpu: GPU, output: str, instance: Instance) -> None:
+    """Combine a local name and deadline with the current provider response."""
+
+    if output == "json":
+        click.echo(json.dumps(_gpu_data(gpu, instance), indent=2))
+        return
+
+    field_list = [
+        ("Name", gpu.name),
+        ("Provider", gpu.provider),
+        ("Status", instance.status),
+        ("Instance ID", gpu.provider_instance_id or "-"),
+        ("Expires at", gpu.expires_at.isoformat()),
+        ("GPU", instance.gpu or "-"),
+        ("Region", instance.region or "-"),
+        ("Created at", instance.created_at.isoformat()),
+        ("SSH", instance.ssh_command or "-"),
+    ]
+    for label, value in field_list:
+        click.echo(f"{label}: {value}")
+
+
+def print_gpu_list(result_list: list[tuple[GPU, Instance]], output: str) -> None:
+    """Display provider results without presenting a local status snapshot."""
+
+    if output == "json":
+        click.echo(json.dumps([_gpu_data(gpu, instance) for gpu, instance in result_list], indent=2))
+        return
+    if not result_list:
+        click.echo("No GPUs.")
+        return
+
+    click.echo(
+        f"{'NAME':{NAME_COLUMN_WIDTH}}  {'PROVIDER':{PROVIDER_COLUMN_WIDTH}}  "
+        f"{'STATUS':{STATUS_COLUMN_WIDTH}}  TTL ENDS (UTC)"
+    )
+    for gpu, instance in result_list:
+        click.echo(
+            f"{gpu.name:{NAME_COLUMN_WIDTH}}  {gpu.provider:{PROVIDER_COLUMN_WIDTH}}  "
+            f"{instance.status:{STATUS_COLUMN_WIDTH}}  "
+            f"{gpu.expires_at:%Y-%m-%d %H:%M}"
+        )
+
+
+def _gpu_data(gpu: GPU, instance: Instance) -> dict:
+    """Keep JSON metadata separate from the live instance while exposing one current status."""
+
+    return gpu.model_dump(mode="json") | {
+        "status": instance.status,
+        "instance": instance.model_dump(mode="json"),
+    }
