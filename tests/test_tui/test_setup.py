@@ -41,6 +41,7 @@ def test_first_launch_registers_an_existing_key_and_saves_configuration(settings
 
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert pilot.app.settings.runpod_api_key.get_secret_value() == "entered-token"
+        assert pilot.app.settings.ssh_public_key == public_key_path
 
     run_app(GallocApp(settings, config_path), scenario)
 

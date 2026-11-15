@@ -29,9 +29,10 @@ def test_invalid_key_fails_before_http(runner, runpod_http, public_key_path, con
 
 
 @pytest.mark.parametrize("action", ["ls", "add", "rm"])
-def test_provider_is_required(runner, runpod_http, public_key_path, action):
-    """Require the destination explicitly for every SSH key action."""
+def test_unknown_configured_provider_fails_before_http(runner, runpod_http, public_key_path, config_path, action):
+    """Explain an unsupported default provider without attempting an SSH-key request."""
 
+    config_path.write_text('[defaults]\nprovider = "not-configured"\n')
     argument_list = ["ssh-key", action]
     if action == "add":
         argument_list.append(str(public_key_path))
@@ -40,8 +41,8 @@ def test_provider_is_required(runner, runpod_http, public_key_path, action):
 
     result = runner.invoke(cli, argument_list)
 
-    assert result.exit_code == 2
-    assert "Missing option '--provider'" in result.stderr
+    assert result.exit_code == 1
+    assert "Unsupported provider: not-configured" in result.stderr
     runpod_http.assert_not_called()
 
 

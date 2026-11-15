@@ -10,13 +10,15 @@ ID_COLUMN_WIDTH = 14
 
 
 @click.command("regions")
-@click.option("--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), default="runpod", show_default=True)
+@click.option(
+    "--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), help="Override the configured provider."
+)
 @click.option("--output", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.pass_obj
-def regions_command(settings: Settings, provider_name: str, output: str) -> None:
+def regions_command(settings: Settings, provider_name: str | None, output: str) -> None:
     """List provider regions."""
 
-    with open_provider(settings, provider_name) as provider:
+    with open_provider(settings, provider_name or settings.provider) as provider:
         region_list = provider.get_region_list()
 
     if output == "json":

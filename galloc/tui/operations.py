@@ -11,7 +11,7 @@ from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable
-from galloc.providers.factory import open_provider
+from galloc.providers.factory import get_ssh_public_key_path, open_provider
 from galloc.providers.schemas import GPUModel, Instance, Region
 from galloc.settings import Settings
 
@@ -55,10 +55,14 @@ def create(settings: Settings, gpu_model: str, region: str, ttl: str) -> str:
     """Create a billable GPU with the configured provider and name an uncertain result."""
 
     provider_name = settings.provider
+    public_key_path = get_ssh_public_key_path(settings, provider_name)
+    ssh_key = read_public_key(public_key_path) if public_key_path is not None else None
     with open_database(settings.database_path) as connection, open_provider(settings, provider_name) as provider:
         creation = prepare_creation(
             connection, provider, provider_name=provider_name, gpu=gpu_model, region=region, ttl=ttl
         )
+        if ssh_key is not None:
+            provider.create_ssh_key(ssh_key)
         try:
             gpu, instance = services.create_gpu(connection, provider, creation)
         except CreationRejected:
@@ -114,10 +118,11 @@ def check_api_key(settings: Settings) -> None:
         provider.get_region_list()
 
 
-def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path | None) -> None:
+def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path | None) -> Path:
     """Register the chosen or newly generated public key, then save the configuration."""
 
     if public_key_path is None:
         public_key_path = generate_key_pair(Path.home() / ".ssh" / "galloc_ed25519")
     add_ssh_key(settings, public_key_path)
     save_config(config_path, provider_name=settings.provider, api_key=api_key, ssh_public_key_path=public_key_path)
+    return public_key_path

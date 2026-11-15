@@ -131,14 +131,14 @@ class SetupScreen(Screen[Settings]):
         """Register the key and save the configuration, then hand the settings to the app."""
 
         try:
-            await asyncio.to_thread(
+            public_key_path = await asyncio.to_thread(
                 operations.finish_setup, self.confirmed_settings, self.app.config_path, self.api_key, public_key_path
             )
         except (GallocError, OSError) as exception:
             self._show_failure(self.query_one(OptionList), str(exception))
             return
 
-        self.dismiss(self.confirmed_settings)
+        self.dismiss(self.confirmed_settings.model_copy(update={"ssh_public_key": public_key_path}))
 
     def _show_failure(self, widget: Widget, message: str) -> None:
         """Report the failure and let the same step be answered again."""

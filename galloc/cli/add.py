@@ -5,10 +5,11 @@ import click
 
 from galloc.core import services
 from galloc.core.schemas import GPU, Creation
+from galloc.core.ssh_keys import read_public_key
 from galloc.core.storage import open_database
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected
-from galloc.providers.factory import PROVIDER_NAME_LIST, open_provider
+from galloc.providers.factory import PROVIDER_NAME_LIST, get_ssh_public_key_path, open_provider
 from galloc.providers.schemas import Instance
 from galloc.settings import Settings
 from galloc.terminal.add import prepare_add
@@ -17,7 +18,9 @@ from galloc.terminal.wait import wait_for_gpu
 
 
 @click.command("add")
-@click.option("--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), default="runpod", show_default=True)
+@click.option(
+    "--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), help="Override the configured provider."
+)
 @click.option("--gpu", help="GPU catalog name or ID. Omit to choose in a terminal; required in scripts.")
 @click.option("--region", help="Provider region ID. Omit to choose in a terminal; required in scripts.")
 @click.option("--ttl", help="Duration such as 30m, 2h, or 1d. Mutually exclusive with --budget.")
@@ -26,7 +29,7 @@ from galloc.terminal.wait import wait_for_gpu
 @click.pass_obj
 def add_command(
     settings: Settings,
-    provider_name: str,
+    provider_name: str | None,
     gpu: str | None,
     region: str | None,
     ttl: str | None,
@@ -36,12 +39,17 @@ def add_command(
     """Add a billable GPU instance."""
 
     _validate_options(gpu, region, ttl, budget)
+    provider_name = provider_name or settings.provider
+    public_key_path = get_ssh_public_key_path(settings, provider_name)
+    ssh_key = read_public_key(public_key_path) if public_key_path is not None else None
 
     with open_database(settings.database_path) as connection, open_provider(settings, provider_name) as provider:
         creation = prepare_add(
             connection, provider, provider_name=provider_name, gpu=gpu, region=region, ttl=ttl, budget=budget
         )
         print_creation_estimate(creation, budget)
+        if ssh_key is not None:
+            provider.create_ssh_key(ssh_key)
 
         created_gpu, instance = _create_gpu(connection, provider, creation)
         instance = wait_for_gpu(provider, created_gpu, instance, settings)

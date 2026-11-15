@@ -8,13 +8,16 @@ from galloc.terminal.ssh_keys import print_ssh_key_removal
 
 @click.command("rm")
 @click.argument("fingerprint", callback=parse_ssh_key_fingerprint)
-@click.option("--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), required=True)
+@click.option(
+    "--provider", "provider_name", type=click.Choice(PROVIDER_NAME_LIST), help="Override the configured provider."
+)
 @click.option("--yes", "-y", is_flag=True, help="Skip removal confirmation.")
 @click.option("--output", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.pass_obj
-def rm_command(settings: Settings, fingerprint: str, provider_name: str, yes: bool, output: str) -> None:
+def rm_command(settings: Settings, fingerprint: str, provider_name: str | None, yes: bool, output: str) -> None:
     """Remove a public key registration."""
 
+    provider_name = provider_name or settings.provider
     with open_provider(settings, provider_name) as provider:
         if not yes:
             click.confirm(f"Remove SSH key {fingerprint} from {provider_name}?", abort=True, err=True)

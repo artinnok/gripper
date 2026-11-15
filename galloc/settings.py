@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import PositiveFloat, PositiveInt, SecretStr
+from pydantic import PositiveFloat, PositiveInt, SecretStr, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from galloc.config import CONFIG_PATH, ConfigFileSource
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     # COMMON #
     ##########
     provider: str = "runpod"
+    disk_gb: PositiveInt = 50
+    ssh_public_key: Path | None = None
     database_path: Path = Path.home() / ".galloc" / "state.db"
     api_timeout: PositiveFloat = 30
     startup_timeout: PositiveFloat = 900
@@ -32,7 +34,15 @@ class Settings(BaseSettings):
     runpod_api_url: str = "https://api.runpod.io/v2/"
     runpod_api_key: SecretStr | None = None
     runpod_image: str = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
-    runpod_disk_gb: PositiveInt = 50
+    runpod_disk_gb: PositiveInt | None = None
+    runpod_ssh_public_key: Path | None = None
+
+    @field_validator("ssh_public_key", "runpod_ssh_public_key")
+    @classmethod
+    def expand_key_path(cls, value: Path | None) -> Path | None:
+        """Resolve home-relative public key paths before they reach an operation."""
+
+        return value.expanduser() if value is not None else None
 
     @classmethod
     def settings_customise_sources(
