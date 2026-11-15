@@ -6,7 +6,7 @@ from galloc.core import services
 from galloc.core.exceptions import GPUCreationPending
 from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import generate_key_pair, read_public_key
+from galloc.core.ssh_keys import SSHKey, generate_key_pair, read_public_key
 from galloc.core.storage import get_linked_gpu_map, open_database, transaction
 from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
@@ -114,6 +114,13 @@ def delete(settings: Settings, gpu_id: UUID) -> str:
     return f"Deleted {gpu.name}"
 
 
+def load_ssh_key_list(settings: Settings) -> list[SSHKey]:
+    """Read public keys registered with the configured provider."""
+
+    with open_provider(settings, settings.provider) as provider:
+        return provider.get_ssh_key_list()
+
+
 def add_ssh_key(settings: Settings, public_key_path: Path) -> str:
     """Register a public key file with the configured provider and describe the outcome."""
 
@@ -123,6 +130,14 @@ def add_ssh_key(settings: Settings, public_key_path: Path) -> str:
 
     status = "Registered" if created else "Already registered"
     return f"{status}  {ssh_key.fingerprint}"
+
+
+def remove_ssh_key(settings: Settings, fingerprint: str) -> str:
+    """Remove a provider registration while keeping the user's local key files."""
+
+    with open_provider(settings, settings.provider) as provider:
+        removed = provider.delete_ssh_key(fingerprint)
+    return "SSH key removed" if removed else "SSH key already absent"
 
 
 def check_api_key(settings: Settings) -> None:

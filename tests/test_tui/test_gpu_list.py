@@ -1,5 +1,4 @@
 import asyncio
-import json
 import threading
 from datetime import timedelta
 
@@ -9,7 +8,6 @@ from textual.widgets import DataTable, Input, Static
 from galloc.core import storage
 from galloc.tui.app import GallocApp
 from galloc.tui.message import Message
-from tests.conftest import SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
 
@@ -187,30 +185,3 @@ def test_superseded_refresh_failure_does_not_replace_newer_result(settings, conf
         assert pilot.app.screen.query_one(Message).content == ""
 
     run_app(GallocApp(settings, config_path), scenario)
-
-
-def test_ssh_key_prompt_registers_a_public_key_file(settings, config_path, runpod_http, tmp_path):
-    """Register the entered public key with the configured provider."""
-
-    config_path.touch()
-    public_key_path = tmp_path / "id_ed25519.pub"
-    public_key_path.write_text(SSH_PUBLIC_KEY + "\n")
-    runpod_http.side_effect = [
-        httpx.Response(200, json={"keys": []}),
-        httpx.Response(200, json={"keys": [SSH_PUBLIC_KEY]}),
-    ]
-
-    async def scenario(pilot):
-        """Open the prompt, enter the file path, and confirm."""
-
-        await pilot.press("k")
-        pilot.app.screen.query_one(Input).value = str(public_key_path)
-        await pilot.press("enter")
-        await settle(pilot)
-
-    run_app(GallocApp(settings, config_path), scenario)
-
-    read_call, write_call = runpod_http.call_args_list
-    (write_request,) = write_call.args
-    assert (write_request.method, write_request.url.path) == ("PUT", "/v2/account/ssh-keys")
-    assert json.loads(write_request.content) == {"keys": [SSH_PUBLIC_KEY]}

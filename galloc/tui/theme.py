@@ -62,7 +62,12 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
     border-left: solid $panel;
 }
 
-#info, #preview, #progress, #note, #startup, Message {
+#key-source {
+    width: 1fr;
+    padding-right: 2;
+}
+
+#info, #preview, #progress, #note, #startup, #path-label, Message {
     height: auto;
 }
 

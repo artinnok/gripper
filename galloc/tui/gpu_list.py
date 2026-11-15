@@ -2,7 +2,6 @@ import asyncio
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 
 from textual import work
 from textual.app import ComposeResult
@@ -22,6 +21,7 @@ from galloc.tui import operations
 from galloc.tui.add import AddScreen
 from galloc.tui.gpu_details import format_gpu, format_status, format_time_left
 from galloc.tui.message import Message
+from galloc.tui.ssh_key.list import SSHKeyListScreen
 from galloc.tui.startup import StartupScreen
 
 
@@ -29,7 +29,7 @@ REFRESH_INTERVAL = 30
 COUNTDOWN_INTERVAL = 1
 LIST_KEYS = (
     "[$foreground]a[/] add   [$foreground]e[/] extend   [$foreground]d[/] delete   "
-    "[$foreground]k[/] ssh key   [$foreground]r[/] refresh   [$foreground]q[/] quit"
+    "[$foreground]k[/] ssh keys   [$foreground]r[/] refresh   [$foreground]q[/] quit"
 )
 QUESTION_KEYS = "[$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
 QUIT_WARNING = (
@@ -45,7 +45,7 @@ class GPUListScreen(Screen):
         Binding("a", "add", "Add GPU"),
         Binding("e", "extend", "Extend TTL"),
         Binding("d", "delete", "Delete GPU"),
-        Binding("k", "add_ssh_key", "Add SSH key"),
+        Binding("k", "ssh_keys", "SSH keys"),
         Binding("r", "refresh", "Refresh"),
         Binding("enter", "confirm", "Confirm"),
         Binding("escape", "cancel", "Cancel"),
@@ -192,20 +192,10 @@ class GPUListScreen(Screen):
             self.query_one(Message).show(message)
         self.refresh_gpu_list()
 
-    def action_add_ssh_key(self) -> None:
-        """Ask for the public key file to register with the configured provider."""
+    def action_ssh_keys(self) -> None:
+        """Open the provider's SSH keys as their own list."""
 
-        self._open_prompt("ssh_key", None, "[b $primary]ssh key[/] [$muted]· add[/]", "~/.ssh/id_ed25519.pub")
-
-    def _open_prompt(self, action: str, gpu: GPU | None, text: str, placeholder: str) -> None:
-        """Ask one action's question and move input to its prompt."""
-
-        self._show_question(action, gpu, text)
-
-        prompt = self.query_one(Input)
-        prompt.placeholder = placeholder
-        prompt.display = True
-        prompt.focus()
+        self.app.push_screen(SSHKeyListScreen())
 
     def action_extend(self) -> None:
         """Ask how much time to add to the selected GPU's deadline."""
@@ -213,7 +203,11 @@ class GPUListScreen(Screen):
         gpu = self._get_selected_gpu()
         if gpu is None:
             return
-        self._open_prompt("extend", gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]", "1h")
+        self._show_question("extend", gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]")
+
+        prompt = self.query_one(Input)
+        prompt.display = True
+        prompt.focus()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Preview the new deadline while a valid extension is being typed."""
@@ -230,17 +224,12 @@ class GPUListScreen(Screen):
         preview.update(f"[$muted]new deadline[/]\n{expires_at:%Y-%m-%d %H:%M} UTC")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Run the pending action with the entered value; an empty answer changes nothing."""
+        """Extend by the entered duration; an empty answer changes nothing."""
 
-        action, gpu, value = self.pending_action, self.pending_gpu, event.value.strip()
+        gpu, ttl = self.pending_gpu, event.value.strip()
         self.action_cancel()
-        if not value:
-            return
-
-        if action == "extend":
-            self.run_operation(operations.extend, gpu.id, value)
-        elif action == "ssh_key":
-            self.run_operation(operations.add_ssh_key, Path(value).expanduser())
+        if ttl:
+            self.run_operation(operations.extend, gpu.id, ttl)
 
     def action_delete(self) -> None:
         """Ask for confirmation before deleting the selected GPU."""

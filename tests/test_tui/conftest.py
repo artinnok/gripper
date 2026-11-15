@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
@@ -68,6 +69,26 @@ def runpod_http(monkeypatch):
 
     monkeypatch.setattr("galloc.providers.factory.RunpodAPIClient", make_client)
     return handler
+
+
+@pytest.fixture
+def registered_key_list(runpod_http):
+    """Keep provider registrations in memory while using the real client and key parsing."""
+
+    key_list = []
+
+    def handler(request):
+        """Read or replace account public keys through the provider's existing endpoint."""
+
+        assert request.url.path == "/v2/account/ssh-keys"
+        if request.method == "PUT":
+            key_list[:] = json.loads(request.content)["keys"]
+        else:
+            assert request.method == "GET"
+        return httpx.Response(200, json={"keys": key_list})
+
+    runpod_http.side_effect = handler
+    return key_list
 
 
 @pytest.fixture
