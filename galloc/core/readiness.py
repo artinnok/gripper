@@ -1,16 +1,17 @@
-from time import monotonic, sleep
+from asyncio import sleep, to_thread
+from time import monotonic
 
 from galloc.core.exceptions import InstanceNotReady
 from galloc.providers.base import Provider
 from galloc.providers.schemas import Instance, InstanceStatus
 
 
-def wait_for_instance(provider: Provider, instance_id: str, *, timeout: float, poll_interval: float) -> Instance:
+async def wait_for_instance(provider: Provider, instance_id: str, *, timeout: float, poll_interval: float) -> Instance:
     """Poll a created instance until ready, failed, removed, or timed out."""
 
     deadline = monotonic() + timeout
     while True:
-        instance = provider.get(instance_id)
+        instance = await to_thread(provider.get, instance_id)
         if instance is None:
             raise InstanceNotReady("The instance disappeared while waiting for startup.")
         if instance.status == InstanceStatus.RUNNING:
@@ -21,4 +22,4 @@ def wait_for_instance(provider: Provider, instance_id: str, *, timeout: float, p
         remaining = deadline - monotonic()
         if remaining <= 0:
             raise InstanceNotReady(f"Instance was not ready after {timeout:g} seconds.")
-        sleep(min(poll_interval, remaining))
+        await sleep(min(poll_interval, remaining))

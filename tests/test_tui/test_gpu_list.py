@@ -17,18 +17,26 @@ def test_list_shows_live_status_beside_details(settings, config_path, runpod_htt
     """Fill the table and the detail column from the provider response."""
 
     config_path.touch()
-    runpod_http.side_effect = [httpx.Response(200, json=pod_data)]
+    runpod_http.side_effect = [
+        httpx.Response(200, json=pod_data),
+        httpx.Response(200, json=pod_data | {"cost": 2.50}),
+    ]
 
     async def scenario(pilot):
-        """Read the first screen without pressing any key."""
+        """Read live details and refresh the provider's hourly rate."""
 
         (name, status, time_left, region, model) = pilot.app.screen.query_one(DataTable).get_row_at(0)
         assert (name, region, model) == ("gpu-1", "US-KS-2", "NVIDIA H200")
         assert "running" in status
         assert "ssh root@195.26.233.3 -p 34446" in pilot.app.screen.query_one("#info", Static).content
+        assert "$3.99/hour" in pilot.app.screen.query_one("#info", Static).content
+
+        await pilot.press("r")
+        await settle(pilot)
+        assert "$2.50/hour" in pilot.app.screen.query_one("#info", Static).content
 
     run_app(GallocApp(settings, config_path), scenario)
-    runpod_http.assert_called_once()
+    assert runpod_http.call_count == 2
 
 
 def test_extend_adds_time_to_the_saved_deadline(settings, config_path, runpod_http, gpu, pod_data):

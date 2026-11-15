@@ -62,12 +62,22 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
     border-left: solid $panel;
 }
 
-#info, #preview, #progress, #note, Message {
+#info, #preview, #progress, #note, #startup, Message {
     height: auto;
 }
 
-#prompt, #api-key, #ttl, #choice {
+#prompt, #api-key, #limit, #choice {
     margin: 1 0;
+}
+
+#columns {
+    height: auto;
+    margin-top: 1;
+    color: $muted;
+}
+
+AddScreen #choice {
+    margin-top: 0;
 }
 
 #note {

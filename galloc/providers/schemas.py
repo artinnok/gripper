@@ -23,6 +23,7 @@ class Instance(BaseModel):
     region: str | None
     ssh_command: str | None
     gpu: str | None
+    hourly_price: float
     created_at: datetime
 
 

@@ -38,7 +38,7 @@ def test_creation_uses_shared_disk_and_provider_key(settings, config_path, home,
     async def scenario(pilot):
         """Create through the TUI using settings read from the temporary TOML file."""
 
-        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h"))
+        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
         await settle(pilot)
         assert "ssh root@" in pilot.app.screen.query_one("#info", Static).content
 

@@ -4,6 +4,7 @@ from uuid import UUID
 from galloc.config import save_config
 from galloc.core import services
 from galloc.core.exceptions import GPUCreationPending
+from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
 from galloc.core.ssh_keys import generate_key_pair, read_public_key
 from galloc.core.storage import get_linked_gpu_map, open_database, transaction
@@ -12,7 +13,7 @@ from galloc.core.validators import prepare_creation, prepare_extension, prepare_
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable
 from galloc.providers.factory import get_ssh_public_key_path, open_provider
-from galloc.providers.schemas import GPUModel, Instance, Region
+from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
 from galloc.settings import Settings
 
 
@@ -51,7 +52,9 @@ def load_region_list(settings: Settings, gpu_model: str) -> list[Region]:
     return region_list
 
 
-def create(settings: Settings, gpu_model: str, region: str, ttl: str) -> str:
+def create(
+    settings: Settings, gpu_model: str, region: str, ttl: str | None = None, budget: str | None = None
+) -> tuple[GPU, Instance]:
     """Create a billable GPU with the configured provider and name an uncertain result."""
 
     provider_name = settings.provider
@@ -59,7 +62,7 @@ def create(settings: Settings, gpu_model: str, region: str, ttl: str) -> str:
     ssh_key = read_public_key(public_key_path) if public_key_path is not None else None
     with open_database(settings.database_path) as connection, open_provider(settings, provider_name) as provider:
         creation = prepare_creation(
-            connection, provider, provider_name=provider_name, gpu=gpu_model, region=region, ttl=ttl
+            connection, provider, provider_name=provider_name, gpu=gpu_model, region=region, ttl=ttl, budget=budget
         )
         if ssh_key is not None:
             provider.create_ssh_key(ssh_key)
@@ -73,7 +76,18 @@ def create(settings: Settings, gpu_model: str, region: str, ttl: str) -> str:
                 f"Check galloc-{creation.gpu.id} in the {provider_name} console."
             ) from exception
 
-    return f"Created {gpu.name}"
+    return gpu, instance
+
+
+async def wait_for_gpu(settings: Settings, gpu: GPU, instance: Instance) -> Instance:
+    """Await the same provider readiness as the CLI without blocking terminal input."""
+
+    if instance.status == InstanceStatus.RUNNING:
+        return instance
+    with open_provider(settings, gpu.provider) as provider:
+        return await wait_for_instance(
+            provider, instance.id, timeout=settings.startup_timeout, poll_interval=settings.startup_poll_interval
+        )
 
 
 def extend(settings: Settings, gpu_id: UUID, ttl: str) -> None:

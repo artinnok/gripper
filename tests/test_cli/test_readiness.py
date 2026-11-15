@@ -1,6 +1,6 @@
 import json
 from datetime import timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -30,7 +30,7 @@ def test_add_waits_for_runtime_and_ssh(
 ):
     """Wait through incomplete startup signals, then show readiness without persisting its status."""
 
-    sleep = Mock()
+    sleep = AsyncMock()
     monkeypatch.setattr("galloc.core.readiness.sleep", sleep)
     runpod_http.side_effect = [
         *creation_response_list,

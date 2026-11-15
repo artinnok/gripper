@@ -222,5 +222,6 @@ class RunpodProvider(Provider):
             region=pod.dataCenterId,
             ssh_command=ssh_command,
             gpu=pod.gpu.id if pod.gpu is not None else None,
+            hourly_price=pod.cost,
             created_at=pod.createdAt,
         )

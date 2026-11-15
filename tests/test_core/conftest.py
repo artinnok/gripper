@@ -36,6 +36,7 @@ def instance():
         region="test",
         ssh_command="ssh root@example.test",
         gpu="H200",
+        hourly_price=3,
         created_at=datetime(2026, 1, 1, 12, tzinfo=UTC),
     )
 

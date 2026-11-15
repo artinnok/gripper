@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -22,11 +23,13 @@ def wait_for_gpu(provider: Provider, gpu: GPU, instance: Instance, settings: Set
 
     try:
         with startup_spinner(f"{gpu.name}  Preparing…"):
-            return wait_for_instance(
-                provider,
-                gpu.provider_instance_id,
-                timeout=settings.startup_timeout,
-                poll_interval=settings.startup_poll_interval,
+            return asyncio.run(
+                wait_for_instance(
+                    provider,
+                    gpu.provider_instance_id,
+                    timeout=settings.startup_timeout,
+                    poll_interval=settings.startup_poll_interval,
+                )
             )
     except Exception, KeyboardInterrupt:
         click.echo(f"\nInspect  galloc get {gpu.name}\nDelete   galloc rm {gpu.name}", err=True)

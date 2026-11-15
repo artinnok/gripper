@@ -62,6 +62,7 @@ class Pod(BaseModel):
     ssh: PodSSH
     runtime: PodRuntime | None
     gpu: PodGPU | None
+    cost: float
     createdAt: datetime
 
 

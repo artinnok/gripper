@@ -172,6 +172,7 @@ def test_get_maps_actual_status(make_runpod_client, pod_data, remote_status, exp
         return
     assert instance.status == expected_status
     assert instance.region == "US-KS-2"
+    assert instance.hourly_price == 3.99
     if remote_status == "RUNNING":
         assert instance.ssh_command == "ssh root@195.26.233.3 -p 34446"
     else:
