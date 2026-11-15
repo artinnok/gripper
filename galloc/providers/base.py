@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from galloc.core.ssh_keys import SSHKey
-from galloc.providers.runpod.schemas import GPUModel, Instance, Region
+from galloc.providers.schemas import GPUModel, Instance, Region
 
 
 class Provider(ABC):
