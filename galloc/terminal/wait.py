@@ -10,7 +10,7 @@ from prompt_toolkit.shortcuts.progress_bar.formatters import SpinningWheel, Text
 from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
 from galloc.providers.base import Provider
-from galloc.providers.runpod.schemas import Instance, InstanceStatus
+from galloc.providers.schemas import Instance, InstanceStatus
 from galloc.settings import Settings
 
 

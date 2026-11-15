@@ -1,12 +1,12 @@
 import json
-from datetime import timedelta
 from decimal import Decimal
 
 import click
 
 from galloc.core.pricing import calculate_cost
 from galloc.core.schemas import GPU, Creation
-from galloc.providers.runpod.schemas import Instance
+from galloc.core.ttl import format_ttl
+from galloc.providers.schemas import Instance
 
 
 NAME_COLUMN_WIDTH = 12
@@ -18,19 +18,11 @@ def print_creation_estimate(creation: Creation, budget: str | None) -> None:
     """Show the in-memory cost estimate before a billable request."""
 
     cost = calculate_cost(creation.duration, creation.hourly_price)
-    estimate = f"Compute  ~${cost:.2f} · ${creation.hourly_price:.2f}/h · {_format_duration(creation.duration)}"
+    estimate = f"Compute  ~${cost:.2f} · ${creation.hourly_price:.2f}/h · {format_ttl(creation.duration)}"
     if budget is not None:
         estimate += f" · budget ${Decimal(budget):f}"
     click.echo(f"\n{estimate}", err=True)
     click.echo("Estimate only; disk/tax extra. Auto-delete off; no spending cap.", err=True)
-
-
-def _format_duration(duration: timedelta) -> str:
-    """Display a whole-minute TTL using the same units as CLI input."""
-
-    days, minutes = divmod(int(duration.total_seconds()) // 60, 24 * 60)
-    hours, minutes = divmod(minutes, 60)
-    return " ".join(f"{value}{unit}" for value, unit in [(days, "d"), (hours, "h"), (minutes, "m")] if value)
 
 
 def print_created_gpu(gpu: GPU, output: str, instance: Instance) -> None:
