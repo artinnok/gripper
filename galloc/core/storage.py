@@ -1,3 +1,4 @@
+import fcntl
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
@@ -49,6 +50,15 @@ def transaction(connection: sqlite3.Connection) -> Iterator[None]:
         raise
     else:
         connection.execute("COMMIT")
+
+
+@contextmanager
+def lock_deadlines(database_path: Path) -> Iterator[None]:
+    """Serialize extension and expiration across processes; closing the lock file releases the lock."""
+
+    with Path(f"{database_path}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 
 def create_gpu(connection: sqlite3.Connection, gpu: GPU) -> None:
@@ -125,7 +135,7 @@ def delete_gpu(connection: sqlite3.Connection, gpu_id: UUID) -> None:
 
 
 def get_expired_gpu_list(connection: sqlite3.Connection, now: datetime) -> list[GPU]:
-    """Select linked deadlines; callers must check existence through the provider."""
+    """Select linked deadlines; callers must reload each deadline before deleting."""
 
     row_list = connection.execute(
         "SELECT * FROM gpus WHERE provider_instance_id IS NOT NULL AND expires_at <= ? ORDER BY expires_at, number",

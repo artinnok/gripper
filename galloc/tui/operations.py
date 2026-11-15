@@ -7,7 +7,7 @@ from galloc.core.exceptions import GPUCreationPending
 from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
 from galloc.core.ssh_keys import SSHKey, generate_key_pair, read_public_key
-from galloc.core.storage import get_linked_gpu_map, open_database, transaction
+from galloc.core.storage import get_linked_gpu_map, lock_deadlines, open_database, transaction
 from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
 from galloc.exceptions import GallocError
@@ -98,7 +98,7 @@ def extend(settings: Settings, gpu_id: UUID, ttl: str) -> None:
         gpu = prepare_instance_operation(connection, gpu_id)
         with open_provider(settings, gpu.provider) as provider:
             gpu, instance = services.get_gpu(connection, provider, gpu)
-        with transaction(connection):
+        with lock_deadlines(settings.database_path), transaction(connection):
             gpu = prepare_extension(connection, gpu_id, ttl, instance)
             services.extend_gpu(connection, gpu)
 

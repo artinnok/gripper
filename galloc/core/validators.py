@@ -73,6 +73,18 @@ def prepare_instance_operation(connection: sqlite3.Connection, gpu_id: UUID | st
     return gpu
 
 
+def prepare_expiration(connection: sqlite3.Connection, gpu_id: UUID, now: datetime) -> GPU | None:
+    """Reload a candidate under the deadline lock and skip removed or extended GPUs."""
+
+    try:
+        gpu = storage.get_gpu(connection, gpu_id)
+    except GPUNotFound:
+        return None
+    if gpu.expires_at > now:
+        return None
+    return gpu
+
+
 def _validate_new_id(connection: sqlite3.Connection, gpu_id: UUID) -> None:
     """Reject duplicate mappings before a creation service can submit another request."""
 

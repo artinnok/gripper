@@ -22,7 +22,7 @@ def print_creation_estimate(creation: Creation, budget: str | None) -> None:
     if budget is not None:
         estimate += f" · budget ${Decimal(budget):f}"
     click.echo(f"\n{estimate}", err=True)
-    click.echo("Estimate only; disk/tax extra. Auto-delete off; no spending cap.", err=True)
+    click.echo("Estimate only; disk/tax extra. Auto-delete requires an open galloc TUI; no spending cap.", err=True)
 
 
 def print_created_gpu(gpu: GPU, output: str, instance: Instance) -> None:

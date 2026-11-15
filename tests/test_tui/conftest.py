@@ -103,3 +103,13 @@ def gpu(settings, pod_data):
     with storage.open_database(settings.database_path) as connection:
         storage.create_gpu(connection, gpu)
     return gpu
+
+
+@pytest.fixture
+def expired_gpu(settings, gpu):
+    """Save an overdue deadline for deletion through the normal provider path."""
+
+    gpu.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    with storage.open_database(settings.database_path) as connection:
+        storage.update_gpu_expiration(connection, gpu)
+    return gpu
