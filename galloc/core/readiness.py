@@ -2,7 +2,7 @@ from time import monotonic, sleep
 
 from galloc.core.exceptions import InstanceNotReady
 from galloc.providers.base import Provider
-from galloc.providers.runpod.schemas import Instance, InstanceStatus
+from galloc.providers.schemas import Instance, InstanceStatus
 
 
 def wait_for_instance(provider: Provider, instance_id: str, *, timeout: float, poll_interval: float) -> Instance:

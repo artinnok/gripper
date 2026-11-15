@@ -21,6 +21,14 @@ def parse_ttl(value: str) -> timedelta:
         raise InvalidTTL("TTL is too large.") from exception
 
 
+def format_ttl(duration: timedelta) -> str:
+    """Display a whole-minute duration using the same units as TTL input."""
+
+    days, minutes = divmod(int(duration.total_seconds()) // 60, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+    return " ".join(f"{value}{unit}" for value, unit in [(days, "d"), (hours, "h"), (minutes, "m")] if value)
+
+
 def calculate_expires_at(ttl: str, starts_at: datetime) -> datetime:
     """Add a TTL to an explicit starting time and return the deadline in UTC."""
 

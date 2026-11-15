@@ -9,7 +9,7 @@ from galloc.core.storage import open_database
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected
 from galloc.providers.factory import PROVIDER_NAME_LIST, open_provider
-from galloc.providers.runpod.schemas import Instance
+from galloc.providers.schemas import Instance
 from galloc.settings import Settings
 from galloc.terminal.add import prepare_add
 from galloc.terminal.output import print_created_gpu, print_creation_estimate
@@ -33,7 +33,7 @@ def add_command(
     budget: str | None,
     output: str,
 ) -> None:
-    """Add a billable GPU instance. TTL is saved; automatic deletion is not available yet."""
+    """Add a billable GPU instance."""
 
     _validate_options(gpu, region, ttl, budget)
 

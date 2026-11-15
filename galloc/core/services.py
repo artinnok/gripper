@@ -4,7 +4,7 @@ from galloc.core import storage
 from galloc.core.schemas import GPU, Creation
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected
-from galloc.providers.runpod.schemas import Instance
+from galloc.providers.schemas import Instance
 
 
 def create_gpu(connection: sqlite3.Connection, provider: Provider, creation: Creation) -> tuple[GPU, Instance]:

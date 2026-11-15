@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from galloc.exceptions import InvalidSSHKey
+from galloc.exceptions import InvalidSSHKey, SSHKeyGenerationFailed
 
 
 class SSHKey(BaseModel):
@@ -44,3 +44,22 @@ def parse_public_key(value: str) -> SSHKey:
 
     bits, fingerprint, description = result.stdout.split(maxsplit=2)
     return SSHKey(public_key=public_key, fingerprint=fingerprint, comment=match.group("comment") or "")
+
+
+def generate_key_pair(private_key_path: Path) -> Path:
+    """Create an Ed25519 key pair without a passphrase, never replacing existing files."""
+
+    public_key_path = private_key_path.with_name(f"{private_key_path.name}.pub")
+    if private_key_path.exists() or public_key_path.exists():
+        raise SSHKeyGenerationFailed(f"Key files already exist for {private_key_path}.")
+
+    private_key_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "galloc", "-f", str(private_key_path)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise SSHKeyGenerationFailed(f"Could not generate {private_key_path}.")
+
+    return public_key_path

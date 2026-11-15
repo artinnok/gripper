@@ -8,7 +8,7 @@ from galloc.core.pricing import calculate_budget_ttl, parse_budget
 from galloc.core.schemas import GPU, Creation
 from galloc.core.ttl import calculate_expires_at
 from galloc.providers.base import Provider
-from galloc.providers.runpod.schemas import Instance, InstanceStatus
+from galloc.providers.schemas import Instance, InstanceStatus
 
 
 def prepare_creation(
