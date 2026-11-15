@@ -13,6 +13,15 @@ OTHER_SSH_PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP4/RIogqrg1nYtweatR
 OTHER_SSH_FINGERPRINT = "SHA256:DSpPr3VkdltX8FFWhqTjXnzQEt7H2mUnqbuv/Iwm3/Q"
 
 
+@pytest.fixture(autouse=True)
+def config_path(tmp_path, monkeypatch):
+    """Keep settings away from the user's configuration file."""
+
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr("galloc.settings.CONFIG_PATH", config_path)
+    return config_path
+
+
 def make_gpu_data(**overrides):
     """Build a GPU catalog response with explicit Pod availability and hardware data."""
 

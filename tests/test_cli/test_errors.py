@@ -75,6 +75,20 @@ def test_invalid_settings_do_not_echo_values(runner, monkeypatch):
     assert "private-input" not in result.output
 
 
+def test_invalid_config_reports_the_file_without_echoing_credentials(runner, config_path, runpod_http):
+    """Explain a TOML syntax error before accessing the provider."""
+
+    config_path.write_text('[providers.runpod]\napi_key = "private-input')
+
+    result = runner.invoke(cli, ["providers"])
+
+    assert result.exit_code == 1
+    assert "Invalid TOML" in result.stderr
+    assert str(config_path) in result.stderr
+    assert "private-input" not in result.output
+    runpod_http.assert_not_called()
+
+
 def test_storage_error_is_readable(runner, monkeypatch, tmp_path):
     """Translate an unusable database directory into a normal CLI error."""
 

@@ -8,7 +8,7 @@ import pytest
 from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
 from galloc.providers.exceptions import CreationRejected, InvalidGPU, InvalidRegion
 from galloc.providers.runpod.provider import RunpodProvider
-from galloc.providers.runpod.schemas import InstanceStatus
+from galloc.providers.schemas import InstanceStatus
 from tests.conftest import make_gpu_data
 
 

@@ -6,7 +6,7 @@ import pytest
 
 from galloc.core import services, storage
 from galloc.core.validators import prepare_creation, prepare_extension
-from galloc.providers.runpod.schemas import InstanceStatus
+from galloc.providers.schemas import InstanceStatus
 
 
 def test_full_lifecycle(connection, provider, instance, prepared_creation, tmp_path):

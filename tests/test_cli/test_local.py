@@ -73,3 +73,13 @@ def test_command_help_without_credentials(runner, monkeypatch, name):
 
     assert result.exit_code == 0
     assert "Usage:" in result.stdout
+
+
+def test_root_invocation_prints_help_without_a_terminal(runner, runpod_http):
+    """Keep scripts and pipes out of the terminal interface."""
+
+    result = runner.invoke(cli, [])
+
+    assert result.exit_code == 0
+    assert "Usage:" in result.stdout
+    runpod_http.assert_not_called()

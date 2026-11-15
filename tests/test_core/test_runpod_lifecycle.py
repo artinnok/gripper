@@ -11,7 +11,7 @@ from galloc.core.validators import (
     prepare_instance_operation,
 )
 from galloc.providers.runpod.provider import RunpodProvider
-from galloc.providers.runpod.schemas import InstanceStatus
+from galloc.providers.schemas import InstanceStatus
 from tests.conftest import make_gpu_data
 
 
