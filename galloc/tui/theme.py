@@ -82,6 +82,7 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
 }
 
 AddScreen #choice {
+    height: 1fr;
     margin-top: 0;
 }
 
