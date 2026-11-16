@@ -1,0 +1,182 @@
+import json
+from datetime import UTC, datetime, timedelta
+
+import httpx
+import pytest
+from pydantic import SecretStr
+from textual.widgets import DataTable, Input, OptionList
+
+from galloc.core import storage
+from galloc.core.schemas import GPU
+from galloc.settings import Settings, load_settings
+from galloc.tui.app import GallocApp
+from galloc.tui.gpu_list import GPUListScreen
+from tests.conftest import SSH_PUBLIC_KEY
+from tests.test_tui.conftest import run_app, settle
+
+
+def test_vast_setup_uses_its_credentials_and_shared_defaults(settings, config_path, home, vast_http, runpod_http):
+    """Select the second provider, register a public key, and save a usable Vast-only config."""
+
+    public_key_path = home / ".ssh" / "id_ed25519.pub"
+    public_key_path.parent.mkdir()
+    public_key_path.write_text(SSH_PUBLIC_KEY)
+    vast_http.side_effect = [
+        httpx.Response(200, json=[]),
+        httpx.Response(200, json=[]),
+        httpx.Response(200, json={"success": True}),
+    ]
+
+    async def scenario(pilot):
+        """Complete the normal setup flow with Vast.ai selected instead of Runpod."""
+
+        await pilot.press("down", "enter")
+        pilot.app.screen.query_one(Input).value = "entered-vast-key"
+        await pilot.press("enter")
+        await settle(pilot)
+        pilot.app.screen.query_one(Input).value = "80"
+        await pilot.press("enter", "enter")
+        await settle(pilot)
+        assert isinstance(pilot.app.screen, GPUListScreen)
+        assert pilot.app.settings.provider == "vast"
+
+    run_app(GallocApp(settings, config_path), scenario)
+    saved = load_settings(config_path)
+    assert saved.provider == "vast"
+    assert saved.disk_gb == saved.vast_disk_gb == 80
+    assert saved.vast_ssh_public_key == public_key_path
+    assert saved.runpod_api_key is None
+    assert all(call.args[0].headers["Authorization"] == "Bearer entered-vast-key" for call in vast_http.call_args_list)
+    assert json.loads(vast_http.call_args.args[0].content) == {"ssh_key": SSH_PUBLIC_KEY}
+    runpod_http.assert_not_called()
+
+
+@pytest.mark.parametrize("status", [401, 404])
+def test_vast_setup_rejects_invalid_credentials(settings, config_path, vast_http, status):
+    """Reject an invalid key through an authenticated endpoint even when the catalog is public."""
+
+    def handler(request):
+        """Allow public marketplace reads but reject access to account keys."""
+
+        if request.url.path.endswith("bundles/"):
+            return httpx.Response(200, json={"offers": []})
+        assert request.url.path.endswith("ssh/")
+        return httpx.Response(status, json={"success": False, "error": "auth_error", "msg": "Invalid user key"})
+
+    vast_http.side_effect = handler
+
+    async def scenario(pilot):
+        """Remain on the credential field after the provider refuses it."""
+
+        await pilot.press("down", "enter")
+        pilot.app.screen.query_one(Input).value = "invalid-vast-key"
+        await pilot.press("enter")
+        await settle(pilot)
+        assert pilot.app.screen.query_one(Input).password
+        assert not pilot.app.screen.query_one(Input).disabled
+        assert not config_path.exists()
+
+    run_app(GallocApp(settings, config_path), scenario)
+
+
+@pytest.mark.parametrize("budget", [False, True])
+def test_vast_add_and_deadline_on_another_screen(
+    tmp_path, config_path, vast_http, vast_offer_data, vast_instance_data, monkeypatch, budget
+):
+    """Select an exact offer, wait for readiness, then expire it while the SSH-key screen is open."""
+
+    config_path.touch()
+    settings = Settings(provider="vast", vast_api_key=SecretStr("vast-token"), database_path=tmp_path / "state.db")
+    monkeypatch.setattr("galloc.tui.app.TTL_CHECK_INTERVAL", 0.05)
+    deleted = False
+
+    def handler(request):
+        """Serve only the Vast.ai endpoints needed by the real TUI workflow."""
+
+        nonlocal deleted
+        if request.url.path.endswith("bundles/"):
+            return httpx.Response(200, json={"offers": [vast_offer_data]})
+        if request.url.path.endswith("ssh/"):
+            return httpx.Response(200, json=[])
+        if request.method == "PUT":
+            assert request.url.path.endswith("asks/1234/")
+            return httpx.Response(200, json={"success": True, "new_contract": 5678})
+        if request.method == "DELETE":
+            deleted = True
+            return httpx.Response(200, json={"success": True})
+        return httpx.Response(200, json={"instances": None if deleted else vast_instance_data})
+
+    vast_http.side_effect = handler
+
+    async def scenario(pilot):
+        """Drive the shared screen and verify that TTL work outlives navigation."""
+
+        await pilot.press("a")
+        await settle(pilot)
+        row = pilot.app.screen.query_one(OptionList).get_option_at_index(0).prompt
+        assert "RTX 4090 #1234" in row and "ϟ" in row and "Available" in row
+        await pilot.press("enter")
+        await settle(pilot)
+        await pilot.press("enter")
+        if budget:
+            await pilot.press("down")
+        await pilot.press("enter")
+        pilot.app.screen.query_one(Input).value = "2.5" if budget else "30m"
+        await pilot.press("enter")
+        await settle(pilot)
+        assert isinstance(pilot.app.screen, GPUListScreen)
+        assert pilot.app.screen.query_one(DataTable).row_count == 1
+        with storage.open_database(settings.database_path) as connection:
+            (gpu,) = storage.get_gpu_list(connection)
+            expected = timedelta(minutes=500 if budget else 30)
+            assert expected - timedelta(seconds=10) < gpu.expires_at - datetime.now(UTC) <= expected
+        await pilot.press("k")
+        await settle(pilot)
+        with storage.open_database(settings.database_path) as connection:
+            gpu.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+            storage.update_gpu_expiration(connection, gpu)
+        await pilot.pause(0.3)
+        await settle(pilot)
+        assert deleted
+        with storage.open_database(settings.database_path) as connection:
+            assert storage.get_gpu_list(connection) == []
+
+    run_app(GallocApp(settings, config_path), scenario)
+
+
+def test_startup_expires_both_providers(
+    settings, config_path, expired_gpu, pod_data, runpod_http, vast_http, vast_instance_data
+):
+    """Use each saved GPU's provider for overdue deletion regardless of the selected default."""
+
+    config_path.touch()
+    settings.vast_api_key = SecretStr("vast-token")
+    vast_gpu = GPU(provider="vast", provider_instance_id="5678", expires_at=datetime.now(UTC) - timedelta(minutes=1))
+    with storage.open_database(settings.database_path) as connection:
+        storage.create_gpu(connection, vast_gpu)
+
+    def runpod_handler(request):
+        """Serve Runpod reads and its specific deletion acknowledgement."""
+
+        return httpx.Response(204) if request.method == "DELETE" else httpx.Response(200, json=pod_data)
+
+    def vast_handler(request):
+        """Serve Vast.ai reads and its different deletion acknowledgement."""
+
+        payload = {"success": True} if request.method == "DELETE" else {"instances": vast_instance_data}
+        return httpx.Response(200, json=payload)
+
+    runpod_http.side_effect = runpod_handler
+    vast_http.side_effect = vast_handler
+
+    async def scenario(pilot):
+        """Wait for startup cleanup and its table refresh."""
+
+        await settle(pilot)
+        with storage.open_database(settings.database_path) as connection:
+            assert storage.get_gpu_list(connection) == []
+        assert pilot.app.screen.query_one(DataTable).row_count == 0
+
+    run_app(GallocApp(settings, config_path), scenario)
+    for handler in (runpod_http, vast_http):
+        assert sum(call.args[0].method == "DELETE" for call in handler.call_args_list) == 1

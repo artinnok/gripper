@@ -9,24 +9,26 @@ from galloc.providers.factory import get_ssh_public_key_path
 from galloc.settings import load_settings
 
 
-def test_saved_configuration_supplies_provider_settings(tmp_path, config_path):
+@pytest.mark.parametrize("provider_name", ["runpod", "vast"])
+def test_saved_configuration_supplies_provider_settings(tmp_path, config_path, provider_name):
     """Read the saved provider and key back through the shared settings model."""
 
     save_config(
         config_path,
-        provider_name="runpod",
+        provider_name=provider_name,
         api_key='key-with-"quote"',
         disk_gb=100,
         ssh_public_key_path=tmp_path / "key.pub",
     )
     settings = load_settings(config_path)
 
-    assert settings.provider == "runpod"
-    assert settings.disk_gb == settings.runpod_disk_gb == 100
-    assert settings.runpod_api_key.get_secret_value() == 'key-with-"quote"'
+    assert settings.provider == provider_name
+    assert settings.disk_gb == getattr(settings, f"{provider_name}_disk_gb") == 100
+    assert getattr(settings, f"{provider_name}_api_key").get_secret_value() == 'key-with-"quote"'
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
 
 
+@pytest.mark.parametrize("provider_name", ["runpod", "vast"])
 @pytest.mark.parametrize(
     "provider_values, expected_disk, expected_key",
     [
@@ -35,24 +37,24 @@ def test_saved_configuration_supplies_provider_settings(tmp_path, config_path):
     ],
 )
 def test_shared_defaults_and_provider_overrides(
-    config_path, tmp_path, monkeypatch, provider_values, expected_disk, expected_key
+    config_path, tmp_path, monkeypatch, provider_values, expected_disk, expected_key, provider_name
 ):
     """Resolve shared values and provider overrides through the same settings used by both interfaces."""
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     config_path.write_text(
-        '[defaults]\nprovider = "runpod"\ndisk_gb = 100\nssh_public_key = "~/.ssh/shared.pub"\n'
-        f'[providers.runpod]\napi_key = "file-token"\n{provider_values}\n'
+        f'[defaults]\nprovider = "{provider_name}"\ndisk_gb = 100\nssh_public_key = "~/.ssh/shared.pub"\n'
+        f'[providers.{provider_name}]\napi_key = "file-token"\n{provider_values}\n'
     )
 
     settings = load_settings(config_path)
 
-    assert settings.runpod_disk_gb == expected_disk
-    assert get_ssh_public_key_path(settings, "runpod") == tmp_path / ".ssh" / expected_key
+    assert getattr(settings, f"{provider_name}_disk_gb") == expected_disk
+    assert get_ssh_public_key_path(settings, provider_name) == tmp_path / ".ssh" / expected_key
 
 
-@pytest.mark.parametrize("section", ["defaults", "providers.runpod"])
+@pytest.mark.parametrize("section", ["defaults", "providers.runpod", "providers.vast"])
 def test_invalid_disk_size_is_rejected(config_path, section):
     """Validate shared and provider disk sizes before opening a provider."""
 

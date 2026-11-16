@@ -15,7 +15,10 @@ def test_providers_reports_configuration(runner, write_config, runpod_http, toke
     result = runner.invoke(cli, ["providers", "--output", "json"])
 
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == [{"name": "runpod", "configured": configured}]
+    assert json.loads(result.stdout) == [
+        {"name": "runpod", "configured": configured},
+        {"name": "vast", "configured": False},
+    ]
     assert "test-token" not in result.output
     runpod_http.assert_not_called()
 

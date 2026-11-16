@@ -42,7 +42,10 @@ def test_legacy_sources_do_not_configure_application(tmp_path, monkeypatch, conf
 
     result = CliRunner().invoke(cli, ["providers", "--output", "json"])
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == [{"name": "runpod", "configured": configured}]
+    assert json.loads(result.stdout) == [
+        {"name": "runpod", "configured": configured},
+        {"name": "vast", "configured": False},
+    ]
     assert "legacy-token" not in result.output
     assert "toml-token" not in result.output
 

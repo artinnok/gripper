@@ -15,3 +15,11 @@ api_url = "https://api.runpod.io/v2/"
 image = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
 # disk_gb = 100
 # ssh_public_key = "~/.ssh/runpod.pub"
+
+# To use Vast.ai, set defaults.provider = "vast" and configure this section.
+# [providers.vast]
+# api_key = "your-vast-api-key"
+# api_url = "https://console.vast.ai/api/v0/"
+# image = "vastai/base-image:@vastai-automatic-tag"
+# disk_gb = 100
+# ssh_public_key = "~/.ssh/vast.pub"

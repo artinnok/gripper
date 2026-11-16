@@ -29,7 +29,16 @@ class Settings(BaseModel):
     runpod_disk_gb: PositiveInt | None = None
     runpod_ssh_public_key: Path | None = None
 
-    @field_validator("ssh_public_key", "runpod_ssh_public_key")
+    ###########
+    # VAST.AI #
+    ###########
+    vast_api_url: str = "https://console.vast.ai/api/v0/"
+    vast_api_key: SecretStr | None = None
+    vast_image: str = "vastai/base-image:@vastai-automatic-tag"
+    vast_disk_gb: PositiveInt | None = None
+    vast_ssh_public_key: Path | None = None
+
+    @field_validator("ssh_public_key", "runpod_ssh_public_key", "vast_ssh_public_key")
     @classmethod
     def expand_key_path(cls, value: Path | None) -> Path | None:
         """Resolve home-relative public key paths before they reach an operation."""

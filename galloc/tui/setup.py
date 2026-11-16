@@ -21,6 +21,7 @@ from galloc.tui.theme import CURRENT, DONE
 
 API_KEY_NOTE_MAP = {
     "runpod": "Pods read/write · Catalog read · Authentication read/write\nconsole.runpod.io/user/credentials",
+    "vast": "instance_read · instance_write · user_read · user_write · misc\ncloud.vast.ai/manage-keys/",
 }
 
 
