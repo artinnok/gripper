@@ -71,7 +71,7 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
     height: auto;
 }
 
-#prompt, #api-key, #limit, #choice {
+#prompt, #limit, #choice {
     margin: 1 0;
 }
 

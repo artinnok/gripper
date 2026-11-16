@@ -35,7 +35,9 @@ def read_config(config_path: Path) -> dict[str, Any]:
     return value_map
 
 
-def save_config(config_path: Path, *, provider_name: str, api_key: str, ssh_public_key_path: Path) -> None:
+def save_config(
+    config_path: Path, *, provider_name: str, api_key: str, disk_gb: int, ssh_public_key_path: Path
+) -> None:
     """Write the complete user configuration with owner-only access."""
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,6 +46,7 @@ def save_config(config_path: Path, *, provider_name: str, api_key: str, ssh_publ
     config_path.write_text(
         "[defaults]\n"
         f"provider = {json.dumps(provider_name)}\n"
+        f"disk_gb = {disk_gb}\n"
         f"ssh_public_key = {json.dumps(str(ssh_public_key_path))}\n"
         "\n"
         f"[providers.{provider_name}]\n"

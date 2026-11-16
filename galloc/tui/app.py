@@ -55,12 +55,9 @@ class GallocApp(App):
         self.screen.query_one(Message).update("")
 
     async def action_quit(self) -> None:
-        """Return to the GPU list and ask before leaving billable GPUs running."""
+        """Return to the screen that owns the exit decision: setup, or the GPU list with its warning."""
 
-        if isinstance(self.screen, SetupScreen):
-            self.exit()
-            return
-        while not isinstance(self.screen, GPUListScreen):
+        while not isinstance(self.screen, (SetupScreen, GPUListScreen)):
             await self.pop_screen()
         self.screen.action_quit()
 

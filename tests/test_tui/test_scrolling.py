@@ -119,6 +119,8 @@ def test_local_keys_scroll_to_the_final_action(settings, config_path, runpod_htt
             await pilot.press("enter")
             pilot.app.screen.query_one(Input).value = "test-token"
             await pilot.press("enter")
+            await settle(pilot)
+            await pilot.press("enter")
         await settle(pilot)
 
         screen = pilot.app.screen
@@ -129,9 +131,9 @@ def test_local_keys_scroll_to_the_final_action(settings, config_path, runpod_htt
             assert screen.mode == "generate"
             assert screen.query_one(Input).has_focus
         else:
-            await pilot.press("end", "up")
+            await pilot.press("end", "up", "up")
             assert choice.highlighted == len(local_key_list) - 1
-            assert "key-31.pub" in choice.render_line(choice.content_size.height - 2).text
+            assert "key-31.pub" in choice.render_line(choice.content_size.height - 3).text
 
     run_app(GallocApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)

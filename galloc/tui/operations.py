@@ -6,7 +6,7 @@ from galloc.core import services
 from galloc.core.exceptions import GPUCreationPending
 from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import SSHKey, generate_key_pair, read_public_key
+from galloc.core.ssh_keys import SSHKey, read_public_key
 from galloc.core.storage import get_linked_gpu_map, lock_deadlines, open_database, transaction
 from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
@@ -147,11 +147,14 @@ def check_api_key(settings: Settings) -> None:
         provider.get_region_list()
 
 
-def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path | None) -> Path:
-    """Register the chosen or newly generated public key, then save the configuration."""
+def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path) -> None:
+    """Register the selected public key, then save the complete configuration."""
 
-    if public_key_path is None:
-        public_key_path = generate_key_pair(Path.home() / ".ssh" / "galloc_ed25519")
     add_ssh_key(settings, public_key_path)
-    save_config(config_path, provider_name=settings.provider, api_key=api_key, ssh_public_key_path=public_key_path)
-    return public_key_path
+    save_config(
+        config_path,
+        provider_name=settings.provider,
+        api_key=api_key,
+        disk_gb=settings.disk_gb,
+        ssh_public_key_path=public_key_path,
+    )
