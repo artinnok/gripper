@@ -5,8 +5,6 @@ from unittest.mock import Mock
 import httpx
 import pytest
 from click.testing import CliRunner
-from prompt_toolkit.application import create_app_session
-from prompt_toolkit.input import create_pipe_input
 
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.core import storage
@@ -18,17 +16,9 @@ class TerminalInput(BytesIO):
     """Supply terminal input to Click without mocking application behavior."""
 
     def isatty(self) -> bool:
-        """Report an interactive terminal for the command's input check."""
+        """Exercise the same command behavior with a terminal input stream."""
 
         return True
-
-
-@pytest.fixture
-def keyboard():
-    """Send key presses through the real selector's input handling."""
-
-    with create_pipe_input() as pipe_input, create_app_session(input=pipe_input):
-        yield pipe_input
 
 
 @pytest.fixture(autouse=True)

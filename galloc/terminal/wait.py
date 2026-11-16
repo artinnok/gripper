@@ -4,9 +4,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 import click
-from prompt_toolkit.output import create_output
-from prompt_toolkit.shortcuts import ProgressBar
-from prompt_toolkit.shortcuts.progress_bar.formatters import SpinningWheel, Text, TimeElapsed
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from galloc.core.readiness import wait_for_instance
 from galloc.core.schemas import GPU
@@ -45,14 +44,13 @@ def startup_spinner(message: str) -> Iterator[None]:
         yield
         return
 
-    wheel = SpinningWheel()
-    wheel.characters = "◜◠◝◞◡◟"
-    with ProgressBar(
-        formatters=[wheel, Text(f" {message}  "), TimeElapsed(), Text("  (Ctrl+C to stop waiting)")],
-        output=create_output(stdout=sys.stderr),
+    with Progress(
+        SpinnerColumn("arc"),
+        TextColumn("{task.description}", markup=False),
+        TimeElapsedColumn(),
+        TextColumn("(Ctrl+C to stop waiting)", markup=False),
+        console=Console(file=sys.stderr),
+        transient=True,
     ) as progress:
-        counter = progress(total=None, remove_when_done=True)
-        try:
-            yield
-        finally:
-            counter.done = True
+        progress.add_task(message, total=None)
+        yield

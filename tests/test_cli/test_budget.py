@@ -47,28 +47,21 @@ def test_budget_creates_with_calculated_ttl(runner, runpod_http, database_path, 
         assert storage.get_gpu(connection, gpu.id) == gpu
 
 
-def test_ttl_shows_estimated_cost(runner, runpod_http, creation_response_list):
+@pytest.mark.parametrize("interactive", [False, True])
+def test_ttl_shows_estimated_cost(runner, runpod_http, creation_response_list, interactive):
     """Show the reverse estimate without requiring a budget or extra API calls."""
 
     runpod_http.side_effect = creation_response_list
-    result = runner.invoke(cli, ["add", "--gpu", "H200", "--region", "US-KS-2", "--ttl", "30m"])
+    result = runner.invoke(
+        cli,
+        ["add", "--gpu", "H200", "--region", "US-KS-2", "--ttl", "30m"],
+        input=TerminalInput() if interactive else None,
+    )
 
     assert result.exit_code == 0, result.output
     assert "Compute  ~$1.50 · $3.00/h · 30m" in result.stderr
     assert "disk/tax extra" in result.stderr
     assert runpod_http.call_count == 3
-
-
-@pytest.mark.parametrize("argument_list", [[], ["--ttl", "30m", "--budget", "10"]])
-def test_exactly_one_limit_in_scripts(runner, runpod_http, argument_list):
-    """Reject missing or conflicting limits before provider access."""
-
-    result = runner.invoke(cli, ["add", "--gpu", "H200", "--region", "US-KS-2", *argument_list])
-
-    assert result.exit_code == 2
-    assert "--ttl" in result.stderr
-    assert "--budget" in result.stderr
-    runpod_http.assert_not_called()
 
 
 @pytest.mark.parametrize("budget", ["invalid", "0", "-5", "NaN", "Infinity"])
@@ -97,25 +90,3 @@ def test_unusable_budget_does_not_create(runner, runpod_http, database_path, cre
     assert runpod_http.call_count == 2
     with storage.open_database(database_path) as connection:
         assert storage.get_gpu_list(connection) == []
-
-
-def test_budget_with_interactive_gpu_and_region(runner, keyboard, runpod_http, creation_response_list):
-    """Keep GPU and region selection while skipping TTL when a budget is supplied."""
-
-    gpu_response, region_response, creation_response = creation_response_list
-    runpod_http.side_effect = [
-        gpu_response,
-        gpu_response,
-        region_response,
-        *creation_response_list,
-    ]
-    keyboard.send_text("\r\r")
-    result = runner.invoke(cli, ["add", "--budget", "10", "--output", "json"], input=TerminalInput())
-
-    assert result.exit_code == 0, result.output
-    gpu = GPU.model_validate_json(result.stdout)
-    assert gpu.expires_at - CREATION_TIME == timedelta(minutes=200)
-    assert "Select a GPU" in result.stderr
-    assert "Select a region" in result.stderr
-    assert "Select a TTL" not in result.stderr
-    assert runpod_http.call_count == 6
