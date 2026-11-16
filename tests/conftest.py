@@ -1,11 +1,13 @@
 import json
 from contextlib import ExitStack
+from unittest.mock import Mock
 
 import httpx
 import pytest
 from pydantic import SecretStr
 
 from galloc.api_clients.runpod.client import RunpodAPIClient
+from galloc.api_clients.vast.client import VastAPIClient
 
 
 SSH_PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK92FXWTQiQNcZl6wr0NXAR5/GYDsK7fdNzTm5qGLWZd laptop"
@@ -119,3 +121,72 @@ def pod_data():
         "createdAt": "2026-06-01T12:00:00Z",
         "startedAt": "2026-06-01T12:02:00Z",
     }
+
+
+@pytest.fixture
+def vast_offer_data():
+    """Supply the fields used from Vast.ai's documented marketplace response."""
+
+    return {
+        "id": 1234,
+        "gpu_name": "RTX 4090",
+        "gpu_ram": 24576,
+        "geolocation": "Oregon, US",
+        "dph_base": 0.30,
+        "dph_total": 0.34,
+        "cpu_ram": 65536,
+        "cpu_cores_effective": 8,
+    }
+
+
+@pytest.fixture
+def vast_instance_data():
+    """Supply actual container state and the documented proxy SSH endpoint."""
+
+    return {
+        "id": 5678,
+        "actual_status": "running",
+        "intended_status": "running",
+        "geolocation": "Oregon, US",
+        "gpu_name": "RTX 4090",
+        "dph_total": 0.34,
+        "start_date": 1794816000,
+        "ssh_host": "ssh1.vast.ai",
+        "ssh_port": 12345,
+    }
+
+
+@pytest.fixture
+def make_vast_client():
+    """Create real Vast.ai clients with isolated mocked HTTP transports."""
+
+    with ExitStack() as stack:
+
+        def make_client(handler):
+            """Connect one client to the test's explicit HTTP handler."""
+
+            return stack.enter_context(
+                VastAPIClient(
+                    SecretStr("vast-token"),
+                    base_url="https://vast.test/api/v0/",
+                    timeout=12,
+                    transport=httpx.MockTransport(handler),
+                )
+            )
+
+        yield make_client
+
+
+@pytest.fixture
+def vast_http(monkeypatch):
+    """Replace only the factory's Vast.ai HTTP transport and reject unarranged calls."""
+
+    handler = Mock(side_effect=AssertionError("Unexpected Vast.ai request."))
+
+    def make_client(api_key, *, base_url, timeout):
+        """Keep real authentication, endpoint construction, and response parsing."""
+
+        return VastAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("galloc.providers.factory.VastAPIClient", make_client)
+    return handler
