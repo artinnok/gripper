@@ -82,7 +82,6 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
 }
 
 AddScreen #choice {
-    height: 1fr;
     margin-top: 0;
 }
 
@@ -102,6 +101,7 @@ Input, Input:focus {
 }
 
 OptionList, OptionList:focus {
+    height: 1fr;
     background: $background;
     background-tint: transparent;
 }
