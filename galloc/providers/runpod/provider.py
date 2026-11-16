@@ -155,7 +155,7 @@ class RunpodProvider(Provider):
         if len(gpu_list) != 1:
             raise InvalidGPU(
                 f"Choose one Runpod Secure Cloud GPU by its catalog name or ID: {gpu!r}. "
-                "Omit --gpu to choose from the catalog."
+                "Run 'galloc' for interactive GPU selection."
             )
 
         (gpu_type,) = gpu_list
