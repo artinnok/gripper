@@ -1,3 +1,4 @@
+import json
 from contextlib import ExitStack
 
 import httpx
@@ -18,8 +19,33 @@ def config_path(tmp_path, monkeypatch):
     """Keep settings away from the user's configuration file."""
 
     config_path = tmp_path / "config.toml"
-    monkeypatch.setattr("galloc.settings.CONFIG_PATH", config_path)
+    monkeypatch.setattr("galloc.main.CONFIG_PATH", config_path)
     return config_path
+
+
+@pytest.fixture
+def write_config(config_path, tmp_path):
+    """Write isolated TOML settings with optional shared and provider overrides."""
+
+    def write(*, defaults=None, runpod=None):
+        """Keep test credentials and database paths explicit in the actual config file."""
+
+        section_map = {
+            "defaults": {"database_path": str(tmp_path / "state.db")} | (defaults or {}),
+            "providers.runpod": {
+                "api_key": "test-token",
+                "api_url": "https://runpod.test/v2/",
+            }
+            | (runpod or {}),
+        }
+        section_list = [
+            f"[{section}]\n" + "\n".join(f"{name} = {json.dumps(value)}" for name, value in values.items())
+            for section, values in section_map.items()
+        ]
+        config_path.write_text("\n\n".join(section_list) + "\n")
+        return config_path
+
+    return write
 
 
 def make_gpu_data(**overrides):

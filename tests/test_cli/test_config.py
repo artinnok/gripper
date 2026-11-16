@@ -11,19 +11,19 @@ from tests.test_tui.test_add import serve_catalog
 @pytest.mark.parametrize(
     "provider_values, expected_disk, expected_key",
     [
-        ("", 100, SSH_PUBLIC_KEY),
-        ('disk_gb = 80\nssh_public_key = "override.pub"', 80, OTHER_SSH_PUBLIC_KEY),
+        ({}, 100, SSH_PUBLIC_KEY),
+        ({"disk_gb": 80, "ssh_public_key": "override.pub"}, 80, OTHER_SSH_PUBLIC_KEY),
     ],
 )
 def test_add_uses_configured_disk_and_key(
-    runner, config_path, public_key_path, tmp_path, runpod_http, pod_data, provider_values, expected_disk, expected_key
+    runner, write_config, public_key_path, tmp_path, runpod_http, pod_data, provider_values, expected_disk, expected_key
 ):
     """Apply shared defaults and provider overrides to actual registration and creation requests."""
 
     (tmp_path / "override.pub").write_text(OTHER_SSH_PUBLIC_KEY)
-    config_path.write_text(
-        '[defaults]\nprovider = "runpod"\ndisk_gb = 100\n'
-        f'ssh_public_key = "{public_key_path}"\n[providers.runpod]\n{provider_values}\n'
+    write_config(
+        defaults={"provider": "runpod", "disk_gb": 100, "ssh_public_key": str(public_key_path)},
+        runpod=provider_values,
     )
 
     def handler(request):
@@ -44,10 +44,10 @@ def test_add_uses_configured_disk_and_key(
     assert json.loads(pod_request.content)["disk"] == expected_disk
 
 
-def test_ssh_key_add_uses_config_or_explicit_argument(runner, config_path, public_key_path, runpod_http, tmp_path):
+def test_ssh_key_add_uses_config_or_explicit_argument(runner, write_config, public_key_path, runpod_http, tmp_path):
     """Use the saved key by default and let an explicit file override it."""
 
-    config_path.write_text(f'[defaults]\nprovider = "runpod"\nssh_public_key = "{public_key_path}"\n')
+    write_config(defaults={"provider": "runpod", "ssh_public_key": str(public_key_path)})
     explicit_key = tmp_path / "explicit.pub"
     explicit_key.write_text(OTHER_SSH_PUBLIC_KEY)
     runpod_http.side_effect = lambda request: httpx.Response(200, json={"keys": []})
@@ -58,10 +58,10 @@ def test_ssh_key_add_uses_config_or_explicit_argument(runner, config_path, publi
         assert json.loads(runpod_http.call_args.args[0].content) == {"keys": [expected_key]}
 
 
-def test_explicit_provider_overrides_the_configured_default(runner, config_path, runpod_http):
+def test_explicit_provider_overrides_the_configured_default(runner, write_config, runpod_http):
     """Read the configured provider unless the command explicitly chooses another one."""
 
-    config_path.write_text('[defaults]\nprovider = "not-configured"\n')
+    write_config(defaults={"provider": "not-configured"})
     result = runner.invoke(cli, ["regions"])
     assert result.exit_code == 1
     assert "Unsupported provider: not-configured" in result.stderr

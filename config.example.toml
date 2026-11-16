@@ -1,0 +1,17 @@
+# Save as ~/.galloc/config.toml, or run galloc to configure it interactively.
+[defaults]
+provider = "runpod"
+disk_gb = 50
+# ssh_public_key = "~/.ssh/id_ed25519.pub"
+# database_path = "/absolute/path/state.db"
+api_timeout = 30
+startup_timeout = 900
+startup_poll_interval = 2
+debug = false
+
+[providers.runpod]
+api_key = "your-runpod-api-key"
+api_url = "https://api.runpod.io/v2/"
+image = "runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404"
+# disk_gb = 100
+# ssh_public_key = "~/.ssh/runpod.pub"

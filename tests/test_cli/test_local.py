@@ -7,10 +7,10 @@ from galloc.main import cli
 
 
 @pytest.mark.parametrize("token, configured", [("test-token", True), ("", False)])
-def test_providers_reports_configuration(runner, monkeypatch, runpod_http, token, configured):
+def test_providers_reports_configuration(runner, write_config, runpod_http, token, configured):
     """Report configured credentials without exposing or validating them remotely."""
 
-    monkeypatch.setenv("GALLOC_RUNPOD_API_KEY", token)
+    write_config(runpod={"api_key": token})
 
     result = runner.invoke(cli, ["providers", "--output", "json"])
 
@@ -21,21 +21,21 @@ def test_providers_reports_configuration(runner, monkeypatch, runpod_http, token
 
 
 @pytest.mark.parametrize("argument_list", [["ls"], ["get", "gpu-1"], ["extend", "gpu-1", "--ttl", "1h"]])
-def test_live_commands_require_credentials(runner, monkeypatch, runpod_http, gpu, argument_list):
+def test_live_commands_require_credentials(runner, write_config, runpod_http, gpu, argument_list):
     """Never substitute a local status when provider credentials are missing."""
 
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
+    write_config(runpod={"api_key": ""})
     result = runner.invoke(cli, argument_list)
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert "Set GALLOC_RUNPOD_API_KEY" in result.stderr
+    assert "Set api_key in [providers.runpod]" in result.stderr
     runpod_http.assert_not_called()
 
 
-def test_unresolved_creation_requires_provider_inspection(runner, monkeypatch, gpu, database_path):
+def test_unresolved_creation_requires_provider_inspection(runner, write_config, gpu, database_path):
     """Direct unresolved creation to the provider without presenting it as an existing GPU."""
 
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
+    write_config(runpod={"api_key": ""})
     pending = gpu.model_copy(update={"provider_instance_id": None})
     with storage.open_database(database_path) as connection:
         storage.update_gpu_instance(connection, pending)
@@ -64,10 +64,10 @@ def test_empty_list(runner):
 
 
 @pytest.mark.parametrize("name", ["add", "ls", "get", "extend", "rm", "providers", "regions", "ssh-key"])
-def test_command_help_without_credentials(runner, monkeypatch, name):
+def test_command_help_without_credentials(runner, write_config, name):
     """Keep every public command discoverable before provider configuration."""
 
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
+    write_config(runpod={"api_key": ""})
 
     result = runner.invoke(cli, [name, "--help"])
 

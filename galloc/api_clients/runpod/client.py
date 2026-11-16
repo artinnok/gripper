@@ -35,7 +35,7 @@ class RunpodAPIClient(APIClient):
         """Configure authentication and a reusable HTTP connection pool."""
 
         if api_key is None or not api_key.get_secret_value().strip():
-            raise MissingCredentials("Set GALLOC_RUNPOD_API_KEY before using Runpod.")
+            raise MissingCredentials("Set api_key in [providers.runpod] in ~/.galloc/config.toml before using Runpod.")
 
         self._client = httpx.Client(
             base_url=base_url,

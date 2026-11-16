@@ -169,7 +169,7 @@ def test_missing_credentials_fail_when_client_is_created(key):
     if key is not None:
         api_key = SecretStr(key)
 
-    with pytest.raises(MissingCredentials, match="GALLOC_RUNPOD_API_KEY"):
+    with pytest.raises(MissingCredentials, match="api_key"):
         RunpodAPIClient(api_key, base_url="https://runpod.test/v2/", timeout=30)
 
 

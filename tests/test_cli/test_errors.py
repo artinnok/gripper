@@ -40,15 +40,15 @@ def test_invalid_ttl_before_creation(runner, runpod_http, database_path):
         assert storage.get_gpu_list(connection) == []
 
 
-def test_missing_credentials(runner, monkeypatch, runpod_http, gpu):
+def test_missing_credentials(runner, write_config, runpod_http, gpu):
     """Explain how to configure a remote operation without a traceback."""
 
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
+    write_config(runpod={"api_key": ""})
 
     result = runner.invoke(cli, ["get", str(gpu.id)])
 
     assert result.exit_code == 1
-    assert "Set GALLOC_RUNPOD_API_KEY" in result.stderr
+    assert "Set api_key in [providers.runpod]" in result.stderr
     assert result.stdout == ""
     runpod_http.assert_not_called()
 
@@ -63,15 +63,17 @@ def test_missing_gpu(runner, runpod_http):
     runpod_http.assert_not_called()
 
 
-def test_invalid_settings_do_not_echo_values(runner, monkeypatch):
+def test_invalid_settings_do_not_echo_values(runner, write_config, config_path):
     """Identify the invalid setting without including its potentially sensitive input."""
 
-    monkeypatch.setenv("GALLOC_API_TIMEOUT", "private-input")
+    write_config(defaults={"api_timeout": "private-input"})
 
     result = runner.invoke(cli, ["providers"])
 
     assert result.exit_code == 1
     assert "api_timeout" in result.stderr
+    assert str(config_path) in result.stderr
+    assert ".env" not in result.stderr
     assert "private-input" not in result.output
 
 
@@ -89,12 +91,12 @@ def test_invalid_config_reports_the_file_without_echoing_credentials(runner, con
     runpod_http.assert_not_called()
 
 
-def test_storage_error_is_readable(runner, monkeypatch, tmp_path):
+def test_storage_error_is_readable(runner, write_config, tmp_path):
     """Translate an unusable database directory into a normal CLI error."""
 
     parent_path = tmp_path / "file"
     parent_path.write_text("not a directory")
-    monkeypatch.setenv("GALLOC_DATABASE_PATH", str(parent_path / "state.db"))
+    write_config(defaults={"database_path": str(parent_path / "state.db")})
 
     result = runner.invoke(cli, ["ls"])
 

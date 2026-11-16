@@ -1,46 +1,78 @@
+import json
+
+import pytest
 from click.testing import CliRunner
 
 from galloc.main import cli
-from galloc.settings import Settings
+from galloc.settings import Settings, load_settings
 
 
-def test_runpod_configuration_priority_and_secret_output(tmp_path, monkeypatch):
-    """Read provider settings centrally and keep the token out of representations."""
+@pytest.mark.parametrize("source", ["environment", "dotenv"])
+@pytest.mark.parametrize("configured", [False, True])
+def test_legacy_sources_do_not_configure_application(tmp_path, monkeypatch, config_path, source, configured):
+    """Ignore legacy credentials and invalid overrides, with or without a TOML file."""
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("GALLOC_RUNPOD_IMAGE", raising=False)
-    monkeypatch.delenv("GALLOC_RUNPOD_DISK_GB", raising=False)
-    (tmp_path / ".env").write_text(
-        "GALLOC_RUNPOD_API_KEY=file-token\n"
-        "GALLOC_RUNPOD_API_URL=https://file.example/v2/\n"
-        "GALLOC_RUNPOD_IMAGE=example/image:1\n"
-        "GALLOC_RUNPOD_DISK_GB=80\n"
+    legacy_values = {
+        "GALLOC_PROVIDER": "unknown",
+        "GALLOC_RUNPOD_API_KEY": "legacy-token",
+        "GALLOC_API_TIMEOUT": "invalid-timeout",
+        "GALLOC_DISK_GB": "0",
+        "GALLOC_RUNPOD_DISK_GB": "0",
+        "GALLOC_DEBUG": "true",
+    }
+    if source == "environment":
+        for name, value in legacy_values.items():
+            monkeypatch.setenv(name, value)
+    else:
+        (tmp_path / ".env").write_text("\n".join(f"{name}={value}" for name, value in legacy_values.items()))
+    if configured:
+        config_path.write_text('[defaults]\ndisk_gb = 100\n[providers.runpod]\napi_key = "toml-token"\ndisk_gb = 80\n')
+
+    settings = load_settings(config_path)
+    assert settings.provider == "runpod"
+    assert settings.api_timeout == 30
+    assert settings.debug is False
+    if configured:
+        assert settings.disk_gb == 100
+        assert settings.runpod_disk_gb == 80
+        assert settings.runpod_api_key.get_secret_value() == "toml-token"
+    else:
+        assert settings == Settings()
+
+    result = CliRunner().invoke(cli, ["providers", "--output", "json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == [{"name": "runpod", "configured": configured}]
+    assert "legacy-token" not in result.output
+    assert "toml-token" not in result.output
+
+
+def test_toml_runtime_options_and_secret_output(write_config):
+    """Load timeouts, debug and provider options from TOML while masking the API key."""
+
+    config_path = write_config(
+        defaults={"api_timeout": 12, "startup_timeout": 300, "startup_poll_interval": 5, "debug": True},
+        runpod={"api_key": "private-token", "api_url": "https://custom.test/v2/", "image": "example/image:1"},
     )
-    monkeypatch.setenv("GALLOC_RUNPOD_API_KEY", "environment-token")
-    monkeypatch.setenv("GALLOC_RUNPOD_API_URL", "https://environment.example/v2/")
 
-    settings = Settings()
+    settings = load_settings(config_path)
 
-    assert settings.runpod_api_key.get_secret_value() == "environment-token"
-    assert settings.runpod_api_url == "https://environment.example/v2/"
+    assert settings.api_timeout == 12
+    assert settings.startup_timeout == 300
+    assert settings.startup_poll_interval == 5
+    assert settings.debug is True
+    assert settings.database_path == config_path.parent / "state.db"
+    assert settings.runpod_api_url == "https://custom.test/v2/"
     assert settings.runpod_image == "example/image:1"
-    assert settings.runpod_disk_gb == 80
-    assert "environment-token" not in repr(settings)
-    assert "environment-token" not in settings.model_dump_json()
-
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
-    monkeypatch.delenv("GALLOC_RUNPOD_API_URL")
-    assert Settings().runpod_api_key.get_secret_value() == "file-token"
-    assert Settings().runpod_api_url == "https://file.example/v2/"
+    assert settings.runpod_api_key.get_secret_value() == "private-token"
+    assert "private-token" not in repr(settings)
+    assert "private-token" not in settings.model_dump_json()
 
 
-def test_settings_and_help_work_without_provider_credentials(tmp_path, monkeypatch):
+def test_settings_and_help_work_without_provider_credentials(config_path):
     """Leave unselected providers unconfigured and keep help accessible."""
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY", raising=False)
-
-    assert Settings().runpod_api_key is None
+    assert load_settings(config_path).runpod_api_key is None
     result = CliRunner().invoke(cli, ["--help"])
 
     assert result.exit_code == 0

@@ -3,28 +3,23 @@ import json
 import httpx
 from textual.widgets import Static
 
-from galloc.settings import Settings
+from galloc.settings import load_settings
 from galloc.tui.app import GallocApp
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
 
 
-def test_creation_uses_shared_disk_and_provider_key(settings, config_path, home, runpod_http, pod_data):
+def test_creation_uses_shared_disk_and_provider_key(config_path, write_config, home, runpod_http, pod_data):
     """Apply the same TOML defaults as the CLI while preserving unrelated registered keys."""
 
     public_key = home / "provider.pub"
     public_key.write_text(SSH_PUBLIC_KEY)
-    config_path.write_text(
-        '[defaults]\nprovider = "runpod"\ndisk_gb = 100\nssh_public_key = "unused.pub"\n'
-        '[providers.runpod]\nssh_public_key = "~/provider.pub"\n'
+    write_config(
+        defaults={"provider": "runpod", "disk_gb": 100, "ssh_public_key": "unused.pub"},
+        runpod={"ssh_public_key": "~/provider.pub"},
     )
-    settings = Settings(
-        _env_file=None,
-        database_path=settings.database_path,
-        runpod_api_key=settings.runpod_api_key,
-        runpod_api_url=settings.runpod_api_url,
-    )
+    settings = load_settings(config_path)
 
     def handler(request):
         """Keep the existing key when adding the configured one before Pod creation."""

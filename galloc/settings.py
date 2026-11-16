@@ -1,20 +1,12 @@
 from pathlib import Path
 
-from pydantic import PositiveFloat, PositiveInt, SecretStr, field_validator
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic import BaseModel, PositiveFloat, PositiveInt, SecretStr, field_validator
 
-from galloc.config import CONFIG_PATH, ConfigFileSource
+from galloc.config import read_config
 
 
-class Settings(BaseSettings):
-    """Load shared settings from the environment, a local .env file, and the user configuration file."""
-
-    model_config = SettingsConfigDict(
-        env_prefix="GALLOC_",
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+class Settings(BaseModel):
+    """Validate shared application settings with explicit values and built-in defaults."""
 
     ##########
     # COMMON #
@@ -44,16 +36,8 @@ class Settings(BaseSettings):
 
         return value.expanduser() if value is not None else None
 
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Read the user configuration file after the environment and .env."""
 
-        config_settings = ConfigFileSource(settings_cls, toml_file=CONFIG_PATH)
-        return init_settings, env_settings, dotenv_settings, file_secret_settings, config_settings
+def load_settings(config_path: Path) -> Settings:
+    """Read and validate the TOML configuration shared by CLI and TUI."""
+
+    return Settings(**read_config(config_path))

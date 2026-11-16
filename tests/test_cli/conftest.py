@@ -11,7 +11,6 @@ from prompt_toolkit.input import create_pipe_input
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.core import storage
 from galloc.core.schemas import GPU
-from galloc.settings import Settings
 from tests.conftest import SSH_PUBLIC_KEY
 
 
@@ -33,17 +32,12 @@ def keyboard():
 
 
 @pytest.fixture(autouse=True)
-def database_path(tmp_path, monkeypatch):
-    """Isolate CLI settings and persisted state from the user's environment."""
+def database_path(tmp_path, monkeypatch, write_config):
+    """Load CLI settings and persisted state from a temporary TOML configuration."""
 
     monkeypatch.chdir(tmp_path)
-    for name in Settings.model_fields:
-        monkeypatch.delenv(f"GALLOC_{name.upper()}", raising=False)
-    database_path = tmp_path / "state.db"
-    monkeypatch.setenv("GALLOC_DATABASE_PATH", str(database_path))
-    monkeypatch.setenv("GALLOC_RUNPOD_API_KEY", "test-token")
-    monkeypatch.setenv("GALLOC_RUNPOD_API_URL", "https://runpod.test/v2/")
-    return database_path
+    write_config()
+    return tmp_path / "state.db"
 
 
 @pytest.fixture

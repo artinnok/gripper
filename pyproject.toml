@@ -10,7 +10,6 @@ dependencies = [
     "httpx>=0.28.1",
     "prompt-toolkit>=3.0.53",
     "pydantic>=2.14.3",
-    "pydantic-settings>=2.16.2",
     "questionary>=2.1.1",
     "rich>=15.0.0",
     "textual>=8.2.8",

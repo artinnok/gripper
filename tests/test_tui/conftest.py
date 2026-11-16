@@ -46,10 +46,9 @@ def home(tmp_path, monkeypatch):
 
 @pytest.fixture
 def settings(tmp_path):
-    """Provide explicit settings that ignore the environment and any .env file."""
+    """Provide explicit settings without reading the user's configuration."""
 
     return Settings(
-        _env_file=None,
         database_path=tmp_path / "state.db",
         runpod_api_key=SecretStr("test-token"),
         runpod_api_url="https://runpod.test/v2/",

@@ -15,7 +15,7 @@ from galloc.cli.regions import regions_command
 from galloc.cli.ssh_key.main import ssh_key_command
 from galloc.config import CONFIG_PATH
 from galloc.exceptions import GallocError
-from galloc.settings import Settings
+from galloc.settings import Settings, load_settings
 from galloc.tui.app import GallocApp
 
 
@@ -53,12 +53,10 @@ def _load_settings(debug: bool | None) -> Settings:
     """Load settings for the CLI and apply an explicitly supplied debug flag."""
 
     try:
-        settings = Settings()
+        settings = load_settings(CONFIG_PATH)
     except ValidationError as exception:
         field_list = [".".join(str(part) for part in error["loc"]) for error in exception.errors()]
-        raise click.ClickException(
-            f"Invalid settings: {', '.join(field_list)}. Check environment variables, .env, and {CONFIG_PATH}."
-        ) from None
+        raise click.ClickException(f"Invalid settings: {', '.join(field_list)}. Check {CONFIG_PATH}.") from None
 
     if debug is not None:
         settings.debug = debug

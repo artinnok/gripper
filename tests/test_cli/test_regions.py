@@ -138,14 +138,14 @@ def test_unknown_region_does_not_create_or_save(runner, runpod_http, database_pa
         assert storage.get_gpu_list(connection) == []
 
 
-def test_regions_requires_credentials(runner, runpod_http, monkeypatch):
+def test_regions_requires_credentials(runner, runpod_http, write_config):
     """Explain how to configure the selected provider before requesting its catalog."""
 
-    monkeypatch.delenv("GALLOC_RUNPOD_API_KEY")
+    write_config(runpod={"api_key": ""})
     result = runner.invoke(cli, ["regions"])
 
     assert result.exit_code == 1
-    assert "Set GALLOC_RUNPOD_API_KEY" in result.stderr
+    assert "Set api_key in [providers.runpod]" in result.stderr
     runpod_http.assert_not_called()
 
 

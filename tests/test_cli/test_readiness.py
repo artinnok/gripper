@@ -92,10 +92,10 @@ def test_interrupted_wait_preserves_gpu(runner, runpod_http, creation_response_l
     assert gpu.provider_instance_id is not None
 
 
-def test_startup_timeout(runner, runpod_http, creation_response_list, pod_data, monkeypatch):
+def test_startup_timeout(runner, runpod_http, creation_response_list, pod_data, monkeypatch, write_config):
     """Bound the wait while preserving the running resource for explicit follow-up."""
 
-    monkeypatch.setenv("GALLOC_STARTUP_TIMEOUT", "1")
+    write_config(defaults={"startup_timeout": 1})
     monkeypatch.setattr("galloc.core.readiness.monotonic", Mock(side_effect=[0, 2]))
     runpod_http.side_effect = [*creation_response_list, httpx.Response(200, json=pod_data | {"runtime": None})]
 

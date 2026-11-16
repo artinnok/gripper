@@ -6,12 +6,12 @@ import pytest
 from galloc.main import cli
 
 
-@pytest.mark.parametrize("mode", ["default", "flag", "env"])
-def test_descriptive_errors_and_debug(runner, runpod_http, monkeypatch, mode):
+@pytest.mark.parametrize("mode", ["default", "flag", "config"])
+def test_descriptive_errors_and_debug(runner, runpod_http, write_config, mode):
     """Always show the API reason; add request diagnostics and traceback only in debug mode."""
 
-    if mode == "env":
-        monkeypatch.setenv("GALLOC_DEBUG", "true")
+    if mode == "config":
+        write_config(defaults={"debug": True})
     argument_list = ["regions", "--output", "json"]
     if mode == "flag":
         argument_list.insert(0, "--debug")
