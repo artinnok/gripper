@@ -30,6 +30,11 @@ class RunpodProvider(Provider):
         self._image = image
         self._disk_gb = disk_gb
 
+    def check_credentials(self) -> None:
+        """Verify the key against Runpod's authenticated data center catalog."""
+
+        self._api_client.get_data_center_list()
+
     def validate_create(self, gpu: str, region: str) -> tuple[str, str, Decimal]:
         """Resolve available hardware and its catalog rate before the creation service starts."""
 

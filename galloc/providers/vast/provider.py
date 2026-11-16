@@ -1,0 +1,226 @@
+import shlex
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import UUID
+
+from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from galloc.api_clients.vast.client import VastAPIClient
+from galloc.api_clients.vast.schemas import Instance as VastInstance
+from galloc.api_clients.vast.schemas import Offer
+from galloc.core.ssh_keys import SSHKey, parse_public_key
+from galloc.providers.base import Provider
+from galloc.providers.exceptions import CreationRejected, GPUUnavailable, InvalidGPU, InvalidRegion
+from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
+
+
+OFFER_LIMIT = 100
+STATUS_MAP = {
+    "created": InstanceStatus.PROVISIONING,
+    "loading": InstanceStatus.PROVISIONING,
+    "starting": InstanceStatus.PROVISIONING,
+    "running": InstanceStatus.RUNNING,
+    "exited": InstanceStatus.STOPPED,
+    "stopped": InstanceStatus.STOPPED,
+    "offline": InstanceStatus.ERROR,
+    "error": InstanceStatus.ERROR,
+}
+
+
+class VastProvider(Provider):
+    """Rent one verified, on-demand NVIDIA GPU offer with an instance-local disk."""
+
+    def __init__(self, api_client: VastAPIClient, *, image: str, disk_gb: int) -> None:
+        """Receive transport and defaults, keeping creation preparation only in memory."""
+
+        self._api_client = api_client
+        self._image = image
+        self._disk_gb = disk_gb
+        self._prepared_offer: Offer | None = None
+
+    def check_credentials(self) -> None:
+        """Verify account key access; Vast.ai's public catalog cannot validate credentials."""
+
+        self._api_client.get_ssh_key_list()
+
+    def validate_create(self, gpu: str, region: str) -> tuple[str, str, Decimal]:
+        """Recheck the exact offer; never replace a sold-out selection with another host."""
+
+        offer = self._resolve_offer(gpu)
+        country = _country(offer.geolocation)
+        if region.strip().upper() != country:
+            raise InvalidRegion(f"Vast.ai offer {offer.id} is in {country}, not {region!r}.")
+
+        self._prepared_offer = offer
+        return str(offer.id), country, Decimal(str(offer.dph_base))
+
+    def create(self, gpu_id: UUID, gpu: str, region: str) -> Instance:
+        """Rent the prepared offer and return its ID immediately so TTL can track it."""
+
+        try:
+            instance_id = self._api_client.create_instance(
+                gpu,
+                {
+                    "image": self._image,
+                    "disk": self._disk_gb,
+                    "label": f"galloc-{gpu_id}",
+                    "runtype": "ssh",
+                    "target_state": "running",
+                    "cancel_unavail": True,
+                },
+            )
+        except APIRequestFailed as exception:
+            if exception.error_code == "no_such_ask":
+                raise GPUUnavailable(f"Vast.ai offer {gpu} is no longer available. Choose another GPU.") from exception
+            if exception.status_code in {200, 400, 401, 402, 403, 404, 410, 422, 429}:
+                raise CreationRejected(str(exception)) from exception
+            raise
+
+        return Instance(
+            id=instance_id,
+            status=InstanceStatus.PROVISIONING,
+            region=region,
+            ssh_command=None,
+            gpu=self._prepared_offer.gpu_name,
+            hourly_price=self._prepared_offer.dph_base,
+            created_at=datetime.now(UTC),
+        )
+
+    def get(self, instance_id: str) -> Instance | None:
+        """Read actual container state; only confirmed absence discards a local mapping."""
+
+        try:
+            instance = self._api_client.get_instance(instance_id)
+        except APIRequestFailed as exception:
+            if exception.status_code == 404 and exception.error_code == "not_found":
+                return None
+            raise
+        if instance is None:
+            return None
+        return _to_instance(instance)
+
+    def delete(self, instance_id: str) -> None:
+        """Destroy the instance and its disk; a confirmed absence is already complete."""
+
+        try:
+            self._api_client.delete_instance(instance_id)
+        except APIRequestFailed as exception:
+            if exception.status_code != 404 or exception.error_code != "not_found":
+                raise
+
+    def get_region_list(self, gpu: str | None = None) -> list[Region]:
+        """Expose country codes as regions; a particular offer has exactly one location."""
+
+        offer_list = [self._resolve_offer(gpu)] if gpu is not None else self._search_offer_list()
+        region_map = {}
+        for offer in offer_list:
+            country = _country(offer.geolocation)
+            region_map[country] = Region(id=country, name=country, location=offer.geolocation)
+        return sorted(region_map.values(), key=lambda region: region.id)
+
+    def get_gpu_list(self, region: str | None = None) -> list[GPUModel]:
+        """List up to 100 cheapest matching offers, displayed in descending compute-price order."""
+
+        gpu_list = [
+            GPUModel(
+                id=str(offer.id),
+                name=f"{offer.gpu_name} #{offer.id}",
+                hourly_price=offer.dph_base,
+                availability="AVAILABLE",
+                memory_gb=offer.gpu_ram // 1024,
+                min_ram_gb=offer.cpu_ram // 1024 if offer.cpu_ram is not None else None,
+                min_vcpu_count=int(offer.cpu_cores_effective) if offer.cpu_cores_effective is not None else None,
+            )
+            for offer in self._search_offer_list(region=region)
+        ]
+        return sorted(gpu_list, key=lambda gpu: gpu.hourly_price, reverse=True)
+
+    def get_ssh_key_list(self) -> list[SSHKey]:
+        """Read account registrations as the same fingerprints used by the CLI and TUI."""
+
+        return [parse_public_key(key.key) for key in self._api_client.get_ssh_key_list()]
+
+    def create_ssh_key(self, ssh_key: SSHKey) -> bool:
+        """Register a missing key without replacing other account registrations."""
+
+        if any(key.fingerprint == ssh_key.fingerprint for key in self.get_ssh_key_list()):
+            return False
+        self._api_client.create_ssh_key(ssh_key.public_key)
+        return True
+
+    def delete_ssh_key(self, fingerprint: str) -> bool:
+        """Remove only the registration matching the requested fingerprint."""
+
+        for key in self._api_client.get_ssh_key_list():
+            if parse_public_key(key.key).fingerprint == fingerprint:
+                self._api_client.delete_ssh_key(key.id)
+                return True
+        return False
+
+    def _resolve_offer(self, gpu: str) -> Offer:
+        """Resolve an offer ID, including IDs displayed beside GPU names in the TUI."""
+
+        offer_id = gpu.rsplit("#", 1)[-1].strip()
+        if not offer_id.isdecimal():
+            raise InvalidGPU("Choose a Vast.ai offer by its numeric ID. Run 'galloc' for interactive selection.")
+        offer_list = self._search_offer_list(offer_id=int(offer_id))
+        if not offer_list:
+            raise GPUUnavailable(f"Vast.ai offer {offer_id} is no longer available. Choose another GPU.")
+        return offer_list[0]
+
+    def _search_offer_list(self, *, region: str | None = None, offer_id: int | None = None) -> list[Offer]:
+        """Search rentable single-GPU offers with enough local disk for the configured image."""
+
+        query = {
+            "type": "ondemand",
+            "limit": OFFER_LIMIT,
+            "order": [["dph_base", "asc"]],
+            "verified": {"eq": True},
+            "rentable": {"eq": True},
+            "rented": {"eq": False},
+            "num_gpus": {"eq": 1},
+            "gpu_arch": {"eq": "nvidia"},
+            "disk_space": {"gte": self._disk_gb},
+            "allocated_storage": self._disk_gb,
+        }
+        if region is not None:
+            query["geolocation"] = {"eq": region.strip().upper()}
+        if offer_id is not None:
+            query["id"] = {"eq": offer_id}
+        return self._api_client.search_offer_list(query)
+
+
+def _country(geolocation: str) -> str:
+    """Use the country code at the end of Vast.ai's location as the placement identifier."""
+
+    return geolocation.rsplit(",", 1)[-1].strip().upper()
+
+
+def _to_instance(instance: VastInstance) -> Instance:
+    """Expose a running container only after Vast.ai supplies its SSH endpoint."""
+
+    status = InstanceStatus.PROVISIONING
+    if instance.actual_status is not None:
+        try:
+            status = STATUS_MAP[instance.actual_status]
+        except KeyError:
+            raise InvalidAPIResponse(
+                f"Vast.ai returned an unknown instance status: {instance.actual_status!r}."
+            ) from None
+    if status == InstanceStatus.STOPPED and instance.intended_status == "running":
+        status = InstanceStatus.PROVISIONING
+
+    ssh_command = None
+    if status == InstanceStatus.RUNNING:
+        if instance.ssh_host and instance.ssh_port:
+            ssh_command = f"ssh {shlex.quote('root@' + instance.ssh_host)} -p {instance.ssh_port}"
+        else:
+            status = InstanceStatus.PROVISIONING
+    return Instance(
+        id=str(instance.id),
+        status=status,
+        region=_country(instance.geolocation),
+        ssh_command=ssh_command,
+        gpu=instance.gpu_name,
+        hourly_price=instance.dph_total,
+        created_at=instance.start_date,
+    )

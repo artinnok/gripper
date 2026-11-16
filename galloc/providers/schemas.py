@@ -5,6 +5,13 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class ProviderName(StrEnum):
+    """Identify the supported GPU providers."""
+
+    RUNPOD = "runpod"
+    VAST = "vast"
+
+
 class InstanceStatus(StrEnum):
     """Describe current instance state reported by the provider."""
 
@@ -41,7 +48,7 @@ class GPUModel(BaseModel):
     id: str
     name: str
     hourly_price: float
-    availability: Literal["LOW", "MEDIUM", "HIGH"]
+    availability: Literal["LOW", "MEDIUM", "HIGH", "AVAILABLE"]
     memory_gb: int
     min_ram_gb: int | None
     min_vcpu_count: int | None

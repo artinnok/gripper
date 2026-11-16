@@ -141,10 +141,10 @@ def remove_ssh_key(settings: Settings, fingerprint: str) -> str:
 
 
 def check_api_key(settings: Settings) -> None:
-    """Confirm that the entered key can read the selected provider's catalog."""
+    """Confirm access through the selected provider's authenticated read endpoint."""
 
     with open_provider(settings, settings.provider) as provider:
-        provider.get_region_list()
+        provider.check_credentials()
 
 
 def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path) -> None:

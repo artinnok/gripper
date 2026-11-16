@@ -10,6 +10,10 @@ class Provider(ABC):
     """Define provider operations independently of HTTP and local storage."""
 
     @abstractmethod
+    def check_credentials(self) -> None:
+        """Verify account access through an authenticated, read-only endpoint."""
+
+    @abstractmethod
     def validate_create(self, gpu: str, region: str) -> tuple[str, str, Decimal]:
         """Return resolved GPU and region IDs and the catalog compute rate in USD/hour."""
 
