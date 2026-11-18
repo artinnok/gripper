@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from textual.markup import escape
 
 from galloc.core.schemas import GPU
+from galloc.core.ssh_keys import format_ssh_command
 from galloc.providers.schemas import Instance, InstanceStatus
 from galloc.tui.theme import AMBER_THEME, MUTED_COLOR
 
@@ -16,9 +18,10 @@ STATUS_COLOR_MAP = {
 }
 
 
-def format_gpu(gpu: GPU, instance: Instance) -> str:
+def format_gpu(gpu: GPU, instance: Instance, public_key_path: Path | None) -> str:
     """Show a selected GPU's hardware, price, deadline, and connection in the detail column."""
 
+    ssh_command = format_ssh_command(instance.ssh_command, public_key_path)
     return (
         f"[b $primary]{gpu.name}[/]\n"
         f"{escape(instance.gpu or '-')}\n"
@@ -26,7 +29,7 @@ def format_gpu(gpu: GPU, instance: Instance) -> str:
         f"{format_status(instance)}\n\n"
         f"[$muted]price[/]\n${instance.hourly_price:.2f}/hour\n\n"
         f"[$muted]expires[/]\n{gpu.expires_at:%Y-%m-%d %H:%M} UTC\n\n"
-        f"[$muted]ssh[/]\n{escape(instance.ssh_command or '-')}\n\n"
+        f"[$muted]ssh[/]\n{escape(ssh_command or '-')}\n\n"
         f"[$muted]instance[/]\n{escape(instance.id)}"
     )
 

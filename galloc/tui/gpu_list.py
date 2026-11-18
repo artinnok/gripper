@@ -13,6 +13,7 @@ from textual.widgets import DataTable, Input, Static
 
 from galloc.core.exceptions import InvalidTTL
 from galloc.core.schemas import GPU
+from galloc.core.ssh_keys import format_ssh_command
 from galloc.core.ttl import calculate_expires_at
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected
@@ -22,6 +23,7 @@ from galloc.tui.add import AddScreen
 from galloc.tui.gpu_details import format_gpu, format_status, format_time_left
 from galloc.tui.message import Message
 from galloc.tui.provider.list import ProviderListScreen
+from galloc.tui.ssh_key.access import configured_key_path
 from galloc.tui.ssh_key.list import SSHKeyListScreen
 from galloc.tui.startup import StartupScreen
 
@@ -30,6 +32,7 @@ REFRESH_INTERVAL = 30
 COUNTDOWN_INTERVAL = 1
 LIST_KEYS = (
     "[$foreground]a[/] add   [$foreground]e[/] extend   [$foreground]d[/] delete   "
+    "[$foreground]c[/] copy SSH   "
     "[$foreground]k[/] ssh keys   [$foreground]p[/] providers   [$foreground]r[/] refresh   [$foreground]q[/] quit"
 )
 QUESTION_KEYS = "[$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
@@ -46,6 +49,7 @@ class GPUListScreen(Screen):
         Binding("a", "add", "Add GPU"),
         Binding("e", "extend", "Extend TTL"),
         Binding("d", "delete", "Delete GPU"),
+        Binding("c", "copy_ssh", "Copy SSH"),
         Binding("k", "ssh_keys", "SSH keys"),
         Binding("p", "providers", "Providers"),
         Binding("r", "refresh", "Refresh"),
@@ -162,7 +166,7 @@ class GPUListScreen(Screen):
             info.update("[$muted]No GPUs.[/]")
         else:
             gpu, instance = self.result_list[self.query_one(DataTable).cursor_row]
-            info.update(format_gpu(gpu, instance))
+            info.update(format_gpu(gpu, instance, configured_key_path(self.app.settings, gpu.provider)))
 
     def on_data_table_row_highlighted(self) -> None:
         """Follow the cursor with the detail column unless it is holding a question."""
@@ -209,6 +213,20 @@ class GPUListScreen(Screen):
         """Open the provider's SSH keys as their own list."""
 
         self.app.push_screen(SSHKeyListScreen())
+
+    def action_copy_ssh(self) -> None:
+        """Copy the selected GPU's complete SSH command without relying on mouse text selection."""
+
+        if self.pending_action is not None or not self.result_list:
+            return
+        gpu, instance = self.result_list[self.query_one(DataTable).cursor_row]
+        if not instance.ssh_command:
+            self.query_one(Message).show("SSH is not available yet.", error=True)
+            return
+
+        command = format_ssh_command(instance.ssh_command, configured_key_path(self.app.settings, gpu.provider))
+        self.app.copy_to_clipboard(command)
+        self.query_one(Message).show("SSH command copied.")
 
     def action_providers(self) -> None:
         """Open provider API keys and the choice of the default provider."""

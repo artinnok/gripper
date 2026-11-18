@@ -1,4 +1,5 @@
 import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -23,6 +24,16 @@ def read_public_key(path: Path) -> SSHKey:
     except UnicodeError:
         raise InvalidSSHKey("Use a UTF-8 OpenSSH public key file.") from None
     return parse_public_key(value)
+
+
+def format_ssh_command(command: str | None, public_key_path: Path | None) -> str | None:
+    """Use the chosen local identity without changing the provider's host, port, or other SSH options."""
+
+    if command is None or public_key_path is None:
+        return command
+    executable, *argument_list = shlex.split(command)
+    private_key_path = public_key_path.expanduser().with_suffix("")
+    return shlex.join([executable, "-i", str(private_key_path), *argument_list])
 
 
 def parse_public_key(value: str) -> SSHKey:

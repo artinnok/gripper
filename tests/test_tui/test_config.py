@@ -35,7 +35,7 @@ def test_creation_uses_shared_disk_and_provider_key(config_path, write_config, h
 
         pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
         await settle(pilot)
-        assert "ssh root@" in pilot.app.screen.query_one("#info", Static).content
+        assert f"ssh -i {home / 'provider'} root@" in pilot.app.screen.query_one("#info", Static).content
 
     run_app(GallocApp(settings, config_path), scenario)
     (key_request,) = [call.args[0] for call in runpod_http.call_args_list if call.args[0].method == "PUT"]
