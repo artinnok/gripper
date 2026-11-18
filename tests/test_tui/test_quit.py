@@ -45,3 +45,29 @@ def test_quit_can_be_cancelled_then_confirmed_without_deleting_gpus(
     runpod_http.assert_called_once()
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu_list(connection) == [gpu]
+
+
+@pytest.mark.parametrize("opening_key_list", [[], ["p"], ["d"]])
+def test_second_q_confirms_the_exit(settings, config_path, runpod_http, gpu, pod_data, opening_key_list):
+    """Exit with q pressed twice, from the list, from another screen, and over an open deletion question."""
+
+    config_path.touch()
+    runpod_http.side_effect = [httpx.Response(200, json=pod_data)]
+    app = GallocApp(settings, config_path)
+
+    async def scenario(pilot):
+        """Read the warning the first q opens, then answer it with the same key."""
+
+        await pilot.press(*opening_key_list, "q")
+        assert app.return_code is None
+        assert "GPUs will not be deleted" in app.screen.query_one("#info", Static).content
+        assert "[$foreground]q[/]" in app.screen.query_one("#keys", Static).content
+
+        await pilot.press("q")
+        assert app.return_code == 0
+
+    run_app(app, scenario)
+
+    runpod_http.assert_called_once()
+    with storage.open_database(settings.database_path) as connection:
+        assert storage.get_gpu_list(connection) == [gpu]

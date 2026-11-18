@@ -2,6 +2,7 @@ import asyncio
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from textual import work
 from textual.app import ComposeResult
@@ -36,10 +37,19 @@ LIST_KEYS = (
     "[$foreground]k[/] ssh keys   [$foreground]p[/] providers   [$foreground]r[/] refresh   [$foreground]q[/] quit"
 )
 QUESTION_KEYS = "[$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
+QUIT_KEYS = "[$foreground]q[/] or [$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
 QUIT_WARNING = (
     "[b $primary]Quit galloc?[/]\n\n"
     "[$warning]TTL monitoring will stop.\nGPUs will not be deleted.\nThey will remain billable.[/]"
 )
+
+
+class PendingAction(StrEnum):
+    """Name the action whose question the detail column holds in place of the selected GPU's details."""
+
+    EXTEND = "extend"
+    DELETE = "delete"
+    QUIT = "quit"
 
 
 class GPUListScreen(Screen):
@@ -55,7 +65,7 @@ class GPUListScreen(Screen):
         Binding("r", "refresh", "Refresh"),
         Binding("enter", "confirm", "Confirm"),
         Binding("escape", "cancel", "Cancel"),
-        Binding("q", "app.quit", "Quit"),
+        Binding("q", "quit_or_confirm", "Quit"),
     ]
 
     def __init__(self) -> None:
@@ -64,7 +74,7 @@ class GPUListScreen(Screen):
         super().__init__()
         # None means the last provider read failed, so no status is shown instead of a stale one.
         self.result_list: list[tuple[GPU, Instance]] | None = []
-        self.pending_action: str | None = None
+        self.pending_action: PendingAction | None = None
         self.pending_gpu: GPU | None = None
 
     def compose(self) -> ComposeResult:
@@ -239,7 +249,7 @@ class GPUListScreen(Screen):
         gpu = self._get_selected_gpu()
         if gpu is None:
             return
-        self._show_question("extend", gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]")
+        self._show_question(PendingAction.EXTEND, gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]")
 
         prompt = self.query_one(Input)
         prompt.display = True
@@ -248,7 +258,7 @@ class GPUListScreen(Screen):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Preview the new deadline while a valid extension is being typed."""
 
-        if self.pending_action != "extend":
+        if self.pending_action != PendingAction.EXTEND:
             return
 
         preview = self.query_one("#preview", Static)
@@ -274,19 +284,30 @@ class GPUListScreen(Screen):
         if gpu is None:
             return
         self._show_question(
-            "delete", gpu, f"[b $primary]{gpu.name}[/] [$muted]· delete[/]\n\nDelete {gpu.name} and its resources?"
+            PendingAction.DELETE,
+            gpu,
+            f"[b $primary]{gpu.name}[/] [$muted]· delete[/]\n\nDelete {gpu.name} and its resources?",
         )
         self.set_focus(None)
+
+    def action_quit_or_confirm(self) -> None:
+        """Open the exit warning with q and confirm it when q is pressed again."""
+
+        if self.pending_action == PendingAction.QUIT:
+            self.app.confirm_quit()
+        else:
+            self.action_quit()
 
     def action_quit(self) -> None:
         """Replace any open question with the exit warning until it is confirmed or cancelled."""
 
         self._close_prompt()
         self.query_one(Message).update("")
-        self._show_question("quit", None, QUIT_WARNING)
+        self._show_question(PendingAction.QUIT, None, QUIT_WARNING)
+        self.query_one("#keys", Static).update(QUIT_KEYS)
         self.set_focus(None)
 
-    def _show_question(self, action: str, gpu: GPU | None, text: str) -> None:
+    def _show_question(self, action: PendingAction, gpu: GPU | None, text: str) -> None:
         """Replace the details with one action's question and remember what it applies to."""
 
         self.pending_action = action
@@ -295,16 +316,16 @@ class GPUListScreen(Screen):
         self.query_one("#keys", Static).update(QUESTION_KEYS)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        """Accept only an answer while deletion or exit waits for confirmation."""
+        """Accept only an answer, or the exit key, while deletion or exit waits for confirmation."""
 
-        if self.pending_action in {"delete", "quit"}:
-            return action in {"confirm", "cancel"}
+        if self.pending_action in {PendingAction.DELETE, PendingAction.QUIT}:
+            return action in {"confirm", "cancel", "quit_or_confirm"}
         return action != "confirm"
 
     def action_confirm(self) -> None:
         """Perform the action named in the open confirmation."""
 
-        if self.pending_action == "quit":
+        if self.pending_action == PendingAction.QUIT:
             self.app.confirm_quit()
             return
 
