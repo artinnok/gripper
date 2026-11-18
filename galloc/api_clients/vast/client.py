@@ -1,9 +1,8 @@
-import logging
-
 import httpx
-from pydantic import BaseModel, JsonValue, SecretStr
+from pydantic import BaseModel, JsonValue, SecretStr, ValidationError
 
 from galloc.api_clients.base import APIClient
+from galloc.api_clients.diagnostics import log_failure, log_request, log_response
 from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
 from galloc.api_clients.vast.schemas import (
     CreateResponse,
@@ -16,9 +15,6 @@ from galloc.api_clients.vast.schemas import (
     SSHKeyList,
     SuccessResponse,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 class VastAPIClient(APIClient):
@@ -42,6 +38,7 @@ class VastAPIClient(APIClient):
             headers={"Authorization": f"Bearer {api_key.get_secret_value()}", "Accept": "application/json"},
             timeout=timeout,
             transport=transport,
+            event_hooks={"request": [log_request], "response": [log_response]},
         )
 
     def search_offer_list(self, query: dict[str, JsonValue]) -> list[Offer]:
@@ -101,13 +98,12 @@ class VastAPIClient(APIClient):
     ) -> httpx.Response:
         """Translate transport, HTTP, and explicit API refusals without retrying requests."""
 
-        logger.debug("Vast.ai request: %s %s", method, path)
         try:
             response = self._client.request(method, path, json=json, params=params)
-        except httpx.RequestError:
+        except httpx.RequestError as exception:
+            log_failure(exception)
             raise APIRequestFailed(f"Vast.ai request failed: {method} {path}.") from None
 
-        logger.debug("Vast.ai response: %s %s HTTP %s", method, path, response.status_code)
         try:
             problem = ErrorResponse.model_validate_json(response.content)
         except ValueError:
@@ -126,9 +122,14 @@ class VastAPIClient(APIClient):
     def _parse_response[ResponseModel: BaseModel](
         self, response: httpx.Response, model: type[ResponseModel]
     ) -> ResponseModel:
-        """Validate endpoint data without including sensitive response payloads in errors."""
+        """Validate endpoint data, naming the request and the unreadable field but none of the returned values."""
 
         try:
             return model.model_validate_json(response.content)
-        except ValueError:
-            raise InvalidAPIResponse("Vast.ai returned an invalid response.") from None
+        except ValidationError as exception:
+            error = exception.errors(include_input=False, include_url=False)[0]
+            field = ".".join(str(part) for part in error["loc"]) or "body"
+            request = response.request
+            raise InvalidAPIResponse(
+                f"Vast.ai returned an invalid response to {request.method} {request.url.path} ({field}: {error['msg']})."
+            ) from None

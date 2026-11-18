@@ -1,6 +1,9 @@
 import logging
 import sqlite3
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 
 import click
 from pydantic import ValidationError
@@ -33,7 +36,9 @@ class CLIGroup(click.Group):
 
 
 @click.group(cls=CLIGroup, invoke_without_command=True)
-@click.option("--debug", is_flag=True, default=None, help="Show request diagnostics and tracebacks on stderr.")
+@click.option(
+    "--debug", is_flag=True, default=None, help="Log HTTP requests and responses: TUI to debug.log, CLI to stderr."
+)
 @click.pass_context
 def cli(context: click.Context, debug: bool | None) -> None:
     """Manage GPU instances with a time to live (TTL).
@@ -43,10 +48,11 @@ def cli(context: click.Context, debug: bool | None) -> None:
 
     settings = _load_settings(debug)
     context.obj = settings
-    _configure_logging(context, settings.debug)
 
     if context.invoked_subcommand is None:
         _open_tui(context, settings)
+    else:
+        context.with_resource(_configure_logging(settings.debug))
 
 
 def _load_settings(debug: bool | None) -> Settings:
@@ -63,15 +69,34 @@ def _load_settings(debug: bool | None) -> Settings:
     return settings
 
 
-def _configure_logging(context: click.Context, debug: bool) -> None:
-    """Keep galloc diagnostics on stderr for the lifetime of this CLI invocation."""
+@contextmanager
+def _configure_logging(debug: bool, *, log_path: Path | None = None) -> Iterator[None]:
+    """Route diagnostics away from the TUI and release the handler when this invocation ends."""
 
     logger = logging.getLogger("galloc")
+    previous_level, previous_propagate = logger.level, logger.propagate
+    if log_path is None:
+        handler = logging.StreamHandler()
+    elif debug:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.touch(mode=0o600)
+        log_path.chmod(0o600)
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+    else:
+        handler = logging.NullHandler()
+
     logger.setLevel(logging.DEBUG if debug else logging.WARNING)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    logger.propagate = False
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
     logger.addHandler(handler)
-    context.call_on_close(lambda: logger.removeHandler(handler))
+
+    try:
+        yield
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+        logger.setLevel(previous_level)
+        logger.propagate = previous_propagate
 
 
 def _open_tui(context: click.Context, settings: Settings) -> None:
@@ -81,7 +106,11 @@ def _open_tui(context: click.Context, settings: Settings) -> None:
         click.echo(context.get_help())
         return
 
+    log_path = CONFIG_PATH.with_name("debug.log")
+    context.with_resource(_configure_logging(settings.debug, log_path=log_path))
     GallocApp(settings, CONFIG_PATH).run()
+    if settings.debug:
+        click.echo(f"Debug log: {log_path}", err=True)
 
 
 cli.add_command(add_command)

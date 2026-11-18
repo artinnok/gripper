@@ -64,7 +64,7 @@ class GPUListScreen(Screen):
     def compose(self) -> ComposeResult:
         """Place the GPU table beside a narrow detail column that also holds the extension prompt."""
 
-        yield Static(f"[b $primary]galloc[/] [$muted]· {escape(self.app.settings.provider)}[/]", id="header")
+        yield Static(id="header")
         with Horizontal():
             yield DataTable(cursor_type="row")
             with Vertical(id="detail"):
@@ -82,10 +82,20 @@ class GPUListScreen(Screen):
             table.add_column(column, key=column)
         table.focus()
         self.query_one(Input).display = False
+        self._show_header()
 
         self.refresh_gpu_list()
         self.set_interval(REFRESH_INTERVAL, self.action_refresh)
         self.set_interval(COUNTDOWN_INTERVAL, self._update_time_left)
+
+    def _show_header(self) -> None:
+        """Name the default provider, which the key screen registers new SSH keys with."""
+
+        header = f"[b $primary]galloc[/] [$muted]· {escape(self.app.settings.provider)}[/]"
+        if self.app.settings.debug:
+            log_path = self.app.config_path.with_name("debug.log")
+            header += f" [$muted]· debug: {escape(str(log_path))}[/]"
+        self.query_one("#header", Static).update(header)
 
     def action_refresh(self) -> None:
         """Reload provider state unless the detail column is holding a question."""

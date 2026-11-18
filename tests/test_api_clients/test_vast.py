@@ -93,3 +93,16 @@ def test_missing_credentials_are_local_and_provider_specific(token):
 
     with pytest.raises(MissingCredentials, match=r"providers.vast"):
         VastAPIClient(SecretStr(token) if token is not None else None, base_url="https://vast.test/", timeout=1)
+
+
+def test_invalid_response_names_the_request_and_field_without_values(make_vast_client):
+    """Say which answer could not be read and why, keeping every returned value out of the message."""
+
+    def handler(request):
+        """Return a key list whose entry lacks the key text."""
+
+        return httpx.Response(200, json=[{"id": 22, "note": "returned-value"}])
+
+    with pytest.raises(InvalidAPIResponse) as raised:
+        make_vast_client(handler).get_ssh_key_list()
+    assert str(raised.value) == "Vast.ai returned an invalid response to GET /api/v0/ssh/ (0.key: Field required)."

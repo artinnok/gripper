@@ -1,10 +1,10 @@
-import logging
 from collections.abc import Iterator
 
 import httpx
 from pydantic import BaseModel, JsonValue, SecretStr
 
 from galloc.api_clients.base import APIClient
+from galloc.api_clients.diagnostics import log_failure, log_request, log_response
 from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
 from galloc.api_clients.runpod.schemas import (
     DataCenter,
@@ -16,9 +16,6 @@ from galloc.api_clients.runpod.schemas import (
     PodPage,
     SSHKeyList,
 )
-
-
-logger = logging.getLogger(__name__)
 
 
 class RunpodAPIClient(APIClient):
@@ -42,6 +39,7 @@ class RunpodAPIClient(APIClient):
             headers={"Authorization": f"Bearer {api_key.get_secret_value()}", "Accept": "application/json"},
             timeout=timeout,
             transport=transport,
+            event_hooks={"request": [log_request], "response": [log_response]},
         )
 
     def create_pod(self, payload: dict[str, JsonValue]) -> Pod:
@@ -120,13 +118,12 @@ class RunpodAPIClient(APIClient):
     ) -> httpx.Response:
         """Translate transport and HTTP failures without retrying requests."""
 
-        logger.debug("Runpod request: %s %s params=%s", method, path, params)
         try:
             response = self._client.request(method, path, json=json, params=params)
-        except httpx.RequestError:
+        except httpx.RequestError as exception:
+            log_failure(exception)
             raise APIRequestFailed(f"Runpod request failed: {method} {path}.") from None
 
-        logger.debug("Runpod response: %s %s HTTP %s", method, path, response.status_code)
         if not response.is_success:
             raise APIRequestFailed(
                 self._error_message(response, method, path),
