@@ -41,3 +41,10 @@ def get_ssh_public_key_path(settings: Settings, provider_name: str) -> Path | No
     """Resolve the selected provider's public key, falling back to the shared default."""
 
     return getattr(settings, f"{provider_name}_ssh_public_key", None) or settings.ssh_public_key
+
+
+def is_configured(settings: Settings, provider_name: str) -> bool:
+    """Report whether the provider has a non-empty API key."""
+
+    api_key = getattr(settings, f"{provider_name}_api_key")
+    return api_key is not None and bool(api_key.get_secret_value().strip())

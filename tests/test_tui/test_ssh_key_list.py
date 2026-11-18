@@ -3,6 +3,7 @@ from threading import Event
 
 import httpx
 import pytest
+from pydantic import SecretStr
 from textual.events import Key
 from textual.widgets import DataTable, Static
 
@@ -30,7 +31,7 @@ def test_key_list_has_selected_details_and_refreshes_from_provider(settings, con
         table = screen.query_one(DataTable)
         detail = screen.query_one("#detail")
         assert table.region.right <= detail.region.x
-        assert table.get_row_at(0) == ["laptop", SSH_FINGERPRINT]
+        assert table.get_row_at(0) == ["laptop", "runpod", SSH_FINGERPRINT]
         assert SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
         await pilot.press("down")
         assert OTHER_SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
@@ -72,6 +73,72 @@ def test_key_removal_requires_confirmation_and_keeps_local_files(settings, confi
     assert key_path.read_text() == SSH_PUBLIC_KEY
 
 
+def test_keys_of_every_provider_are_listed_and_removed_from_their_own(
+    settings, config_path, registered_key_list, vast_http
+):
+    """Show the same key once per provider that has it and remove only the selected provider's registration."""
+
+    config_path.touch()
+    settings.vast_api_key = SecretStr("vast-token")
+    registered_key_list.append(SSH_PUBLIC_KEY)
+    vast_key_list = [{"id": 22, "key": SSH_PUBLIC_KEY}]
+
+    def serve_vast(request):
+        """Read account keys and remove one of them by its provider ID."""
+
+        if request.method == "DELETE":
+            assert request.url.path.endswith("ssh/22/")
+            vast_key_list.clear()
+            return httpx.Response(200, json={"success": True})
+        assert request.url.path.endswith("ssh/")
+        return httpx.Response(200, json=vast_key_list)
+
+    vast_http.side_effect = serve_vast
+
+    async def scenario(pilot):
+        """Read both rows, then remove the second provider's one."""
+
+        await pilot.press("k")
+        await settle(pilot)
+        screen = pilot.app.screen
+        table = screen.query_one(DataTable)
+        assert table.get_row_at(0) == ["laptop", "runpod", SSH_FINGERPRINT]
+        assert table.get_row_at(1) == ["laptop", "vast", SSH_FINGERPRINT]
+
+        await pilot.press("down", "d")
+        assert "Remove from vast?" in screen.query_one("#info", Static).content
+        await pilot.press("enter")
+        await settle(pilot)
+        assert table.row_count == 1
+        assert table.get_row_at(0) == ["laptop", "runpod", SSH_FINGERPRINT]
+
+    run_app(GallocApp(settings, config_path), scenario)
+    assert registered_key_list == [SSH_PUBLIC_KEY]
+
+
+def test_failed_provider_keeps_the_other_providers_keys(settings, config_path, registered_key_list, vast_http):
+    """List what could be read and name the provider whose keys could not."""
+
+    config_path.touch()
+    settings.vast_api_key = SecretStr("vast-token")
+    registered_key_list.append(SSH_PUBLIC_KEY)
+    vast_http.side_effect = [httpx.Response(500)]
+
+    async def scenario(pilot):
+        """Open the key list while one provider is failing."""
+
+        await pilot.press("k")
+        await settle(pilot)
+        screen = pilot.app.screen
+        message = screen.query_one(Message).content
+
+        assert screen.query_one(DataTable).get_row_at(0) == ["laptop", "runpod", SSH_FINGERPRINT]
+        assert SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
+        assert "vast" in message and "500" in message
+
+    run_app(GallocApp(settings, config_path), scenario)
+
+
 def test_failed_key_refresh_clears_stale_rows_and_can_retry(settings, config_path, runpod_http):
     """Distinguish failed provider access from an empty key list and allow a fresh read."""
 
@@ -91,6 +158,7 @@ def test_failed_key_refresh_clears_stale_rows_and_can_retry(settings, config_pat
         await settle(pilot)
         screen = pilot.app.screen
         assert screen.query_one(DataTable).row_count == 0
+        assert "Provider data unavailable" in screen.query_one("#info", Static).content
         assert "403" in screen.query_one(Message).content
         await pilot.press("r")
         await settle(pilot)

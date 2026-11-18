@@ -1,4 +1,5 @@
 import json
+import re
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -53,3 +54,49 @@ def save_config(
         f"api_key = {json.dumps(api_key)}\n",
         encoding="utf-8",
     )
+
+
+def save_config_value(config_path: Path, table: str, name: str, value: str) -> None:
+    """Set one string in one table, keeping every other line of the file as the user wrote it."""
+
+    text = config_path.read_text(encoding="utf-8")
+    updated_text = _set_line(text, table, name, f"{name} = {json.dumps(value)}")
+
+    failure = InvalidConfig(f"Could not update {config_path}. Set {name} in [{table}] manually.")
+    try:
+        expected_config = tomllib.loads(text)
+        section = expected_config
+        for key in table.split("."):
+            section = section.setdefault(key, {})
+        section[name] = value
+        updated_config = tomllib.loads(updated_text)
+
+    except tomllib.TOMLDecodeError:
+        raise failure from None
+
+    if updated_config != expected_config:
+        raise failure
+
+    config_path.chmod(0o600)
+    config_path.write_text(updated_text, encoding="utf-8")
+
+
+def _set_line(text: str, table: str, name: str, assignment: str) -> str:
+    """Replace the name's line in its table, add the line to the table, or append the table."""
+
+    header = f"[{table}]"
+    line_list = text.splitlines()
+    stripped_list = [line.strip() for line in line_list]
+    if header not in stripped_list:
+        return "\n".join([*line_list, "", header, assignment, ""]).lstrip("\n")
+
+    first = stripped_list.index(header) + 1
+    for index in range(first, len(line_list)):
+        if stripped_list[index].startswith("["):
+            break
+        if re.match(rf"{re.escape(name)}\s*=", stripped_list[index]):
+            line_list[index] = assignment
+            return "\n".join([*line_list, ""])
+
+    line_list.insert(first, assignment)
+    return "\n".join([*line_list, ""])

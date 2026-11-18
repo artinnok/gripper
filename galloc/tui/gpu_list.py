@@ -21,6 +21,7 @@ from galloc.tui import operations
 from galloc.tui.add import AddScreen
 from galloc.tui.gpu_details import format_gpu, format_status, format_time_left
 from galloc.tui.message import Message
+from galloc.tui.provider.list import ProviderListScreen
 from galloc.tui.ssh_key.list import SSHKeyListScreen
 from galloc.tui.startup import StartupScreen
 
@@ -29,7 +30,7 @@ REFRESH_INTERVAL = 30
 COUNTDOWN_INTERVAL = 1
 LIST_KEYS = (
     "[$foreground]a[/] add   [$foreground]e[/] extend   [$foreground]d[/] delete   "
-    "[$foreground]k[/] ssh keys   [$foreground]r[/] refresh   [$foreground]q[/] quit"
+    "[$foreground]k[/] ssh keys   [$foreground]p[/] providers   [$foreground]r[/] refresh   [$foreground]q[/] quit"
 )
 QUESTION_KEYS = "[$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
 QUIT_WARNING = (
@@ -46,6 +47,7 @@ class GPUListScreen(Screen):
         Binding("e", "extend", "Extend TTL"),
         Binding("d", "delete", "Delete GPU"),
         Binding("k", "ssh_keys", "SSH keys"),
+        Binding("p", "providers", "Providers"),
         Binding("r", "refresh", "Refresh"),
         Binding("enter", "confirm", "Confirm"),
         Binding("escape", "cancel", "Cancel"),
@@ -78,7 +80,7 @@ class GPUListScreen(Screen):
         """Load the list now and keep it and its countdowns current while the screen stays open."""
 
         table = self.query_one(DataTable)
-        for column in ("NAME", "STATUS", "LEFT", "REGION", "GPU"):
+        for column in ("NAME", "PROVIDER", "STATUS", "LEFT", "REGION", "GPU"):
             table.add_column(column, key=column)
         table.focus()
         self.query_one(Input).display = False
@@ -128,6 +130,7 @@ class GPUListScreen(Screen):
         for row, (gpu, instance) in enumerate(result_list or []):
             table.add_row(
                 gpu.name,
+                gpu.provider,
                 format_status(instance),
                 format_time_left(gpu, now),
                 escape(instance.region or "-"),
@@ -206,6 +209,11 @@ class GPUListScreen(Screen):
         """Open the provider's SSH keys as their own list."""
 
         self.app.push_screen(SSHKeyListScreen())
+
+    def action_providers(self) -> None:
+        """Open provider API keys and the choice of the default provider."""
+
+        self.app.push_screen(ProviderListScreen(), lambda result: self._show_header())
 
     def action_extend(self) -> None:
         """Ask how much time to add to the selected GPU's deadline."""

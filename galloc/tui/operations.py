@@ -1,7 +1,9 @@
 from pathlib import Path
 from uuid import UUID
 
-from galloc.config import save_config
+from pydantic import SecretStr
+
+from galloc.config import save_config, save_config_value
 from galloc.core import services
 from galloc.core.exceptions import GPUCreationPending
 from galloc.core.readiness import wait_for_instance
@@ -12,7 +14,7 @@ from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable
-from galloc.providers.factory import get_ssh_public_key_path, open_provider
+from galloc.providers.factory import PROVIDER_NAME_LIST, get_ssh_public_key_path, is_configured, open_provider
 from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
 from galloc.settings import Settings
 
@@ -114,11 +116,18 @@ def delete(settings: Settings, gpu_id: UUID) -> str:
     return f"Deleted {gpu.name}"
 
 
-def load_ssh_key_list(settings: Settings) -> list[SSHKey]:
-    """Read public keys registered with the configured provider."""
+def load_ssh_key_list(settings: Settings) -> tuple[list[tuple[str, SSHKey]], list[str]]:
+    """Read the public keys registered with every provider that has an API key, beside any failures."""
 
-    with open_provider(settings, settings.provider) as provider:
-        return provider.get_ssh_key_list()
+    result_list, error_list = [], []
+    for provider_name in [name for name in PROVIDER_NAME_LIST if is_configured(settings, name)]:
+        try:
+            with open_provider(settings, provider_name) as provider:
+                result_list += [(provider_name, ssh_key) for ssh_key in provider.get_ssh_key_list()]
+        except (GallocError, OSError) as exception:
+            error_list.append(f"{provider_name}: {exception}")
+
+    return result_list, error_list
 
 
 def add_ssh_key(settings: Settings, public_key_path: Path) -> str:
@@ -132,10 +141,10 @@ def add_ssh_key(settings: Settings, public_key_path: Path) -> str:
     return f"{status}  {ssh_key.fingerprint}"
 
 
-def remove_ssh_key(settings: Settings, fingerprint: str) -> str:
-    """Remove a provider registration while keeping the user's local key files."""
+def remove_ssh_key(settings: Settings, provider_name: str, fingerprint: str) -> str:
+    """Remove one provider's registration while keeping the user's local key files."""
 
-    with open_provider(settings, settings.provider) as provider:
+    with open_provider(settings, provider_name) as provider:
         removed = provider.delete_ssh_key(fingerprint)
     return "SSH key removed" if removed else "SSH key already absent"
 
@@ -158,3 +167,21 @@ def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key
         disk_gb=settings.disk_gb,
         ssh_public_key_path=public_key_path,
     )
+
+
+def save_api_key(settings: Settings, config_path: Path, provider_name: str, api_key: str) -> Settings:
+    """Verify one provider's API key, save it to the configuration, and return settings that use it."""
+
+    settings = settings.model_copy(update={f"{provider_name}_api_key": SecretStr(api_key)})
+    with open_provider(settings, provider_name) as provider:
+        provider.check_credentials()
+
+    save_config_value(config_path, f"providers.{provider_name}", "api_key", api_key)
+    return settings
+
+
+def use_provider(settings: Settings, config_path: Path, provider_name: str) -> Settings:
+    """Save the default provider of the SSH key screen and CLI commands, and return settings that use it."""
+
+    save_config_value(config_path, "defaults", "provider", provider_name)
+    return settings.model_copy(update={"provider": provider_name})

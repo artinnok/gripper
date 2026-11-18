@@ -3,7 +3,7 @@ import stat
 import pytest
 from pydantic import ValidationError
 
-from galloc.config import save_config
+from galloc.config import save_config, save_config_value
 from galloc.exceptions import InvalidConfig
 from galloc.providers.factory import get_ssh_public_key_path
 from galloc.settings import load_settings
@@ -92,3 +92,50 @@ def test_saving_existing_configuration_restricts_file_permissions(config_path, t
     )
 
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    ("saved", "expected"),
+    [
+        ("", '[providers.vast]\napi_key = "new-key"\n'),
+        (
+            '# notes\n[defaults]\nprovider = "runpod"  # default\n',
+            '# notes\n[defaults]\nprovider = "runpod"  # default\n\n[providers.vast]\napi_key = "new-key"\n',
+        ),
+        (
+            '[providers.vast]\ndisk_gb = 80\n\n[providers.runpod]\napi_key = "other"\n',
+            '[providers.vast]\napi_key = "new-key"\ndisk_gb = 80\n\n[providers.runpod]\napi_key = "other"\n',
+        ),
+        (
+            '[providers.runpod]\napi_key = "other"\n[providers.vast]\n# rotated\napi_key = "old-key"\n',
+            '[providers.runpod]\napi_key = "other"\n[providers.vast]\n# rotated\napi_key = "new-key"\n',
+        ),
+    ],
+)
+def test_one_value_is_saved_without_rewriting_the_file(config_path, saved, expected):
+    """Append a table, add a line to a table, or replace a line, keeping comments and other values."""
+
+    config_path.write_text(saved)
+    config_path.chmod(0o644)
+
+    save_config_value(config_path, "providers.vast", "api_key", "new-key")
+
+    assert config_path.read_text() == expected
+    assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
+    assert load_settings(config_path).vast_api_key.get_secret_value() == "new-key"
+
+
+@pytest.mark.parametrize(
+    "saved", ["providers = { vast = { disk_gb = 80 } }\n", '[providers."vast"]\ndisk_gb = 80\n', "["]
+)
+def test_unusual_layout_is_left_for_manual_editing(config_path, saved):
+    """Refuse a file this writer cannot change safely instead of damaging it."""
+
+    config_path.write_text(saved)
+
+    with pytest.raises(InvalidConfig) as failure:
+        save_config_value(config_path, "providers.vast", "api_key", "private-token")
+
+    assert "manually" in str(failure.value)
+    assert "private-token" not in str(failure.value)
+    assert config_path.read_text() == saved

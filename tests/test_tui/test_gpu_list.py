@@ -23,8 +23,8 @@ def test_list_shows_live_status_beside_details(settings, config_path, runpod_htt
     async def scenario(pilot):
         """Read live details and refresh the provider's hourly rate."""
 
-        (name, status, time_left, region, model) = pilot.app.screen.query_one(DataTable).get_row_at(0)
-        assert (name, region, model) == ("gpu-1", "US-KS-2", "NVIDIA H200")
+        (name, provider, status, time_left, region, model) = pilot.app.screen.query_one(DataTable).get_row_at(0)
+        assert (name, provider, region, model) == ("gpu-1", "runpod", "US-KS-2", "NVIDIA H200")
         assert "running" in status
         assert "ssh root@195.26.233.3 -p 34446" in pilot.app.screen.query_one("#info", Static).content
         assert "$3.99/hour" in pilot.app.screen.query_one("#info", Static).content

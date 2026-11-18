@@ -2,7 +2,7 @@ import json
 
 import click
 
-from galloc.providers.factory import PROVIDER_NAME_LIST
+from galloc.providers.factory import PROVIDER_NAME_LIST, is_configured
 from galloc.settings import Settings
 
 
@@ -12,11 +12,7 @@ from galloc.settings import Settings
 def providers_command(settings: Settings, output: str) -> None:
     """List providers and configuration status."""
 
-    provider_list = []
-    for name in PROVIDER_NAME_LIST:
-        api_key = getattr(settings, f"{name}_api_key")
-        configured = api_key is not None and bool(api_key.get_secret_value().strip())
-        provider_list.append({"name": name, "configured": configured})
+    provider_list = [{"name": name, "configured": is_configured(settings, name)} for name in PROVIDER_NAME_LIST]
 
     if output == "json":
         click.echo(json.dumps(provider_list, indent=2))
