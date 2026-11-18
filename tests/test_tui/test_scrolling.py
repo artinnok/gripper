@@ -14,7 +14,7 @@ from tests.test_tui.conftest import run_app, settle
 
 
 @pytest.fixture
-def long_catalog(config_path, runpod_http):
+def long_catalog(config_path, runpod_http, local_key):
     """Serve more GPU models and regions than fit on the terminal screen."""
 
     config_path.touch()
@@ -32,6 +32,8 @@ def long_catalog(config_path, runpod_http):
         """Allow catalog reads only; scrolling must never create a GPU."""
 
         assert request.method == "GET"
+        if request.url.path.endswith("account/ssh-keys"):
+            return httpx.Response(200, json={"keys": [local_key.public_key]})
         if request.url.path.endswith("/catalog/gpus"):
             return httpx.Response(200, json={"gpus": gpu_list})
         assert request.url.path.endswith("/catalog/datacenters")
@@ -40,9 +42,14 @@ def long_catalog(config_path, runpod_http):
     runpod_http.side_effect = handler
 
 
-@pytest.mark.parametrize("step, last_label", [("gpu", "GPU 31"), ("region", "REGION-31")])
+@pytest.mark.parametrize(
+    "step, last_label, choice_id, columns_id",
+    [("gpu", "GPU 31", "#choice", "#columns"), ("region", "REGION-31", "#step-choice", "#step-columns")],
+)
 @pytest.mark.parametrize("control", ["keyboard", "mouse"])
-def test_long_picker_scrolls_within_the_screen(settings, config_path, long_catalog, step, last_label, control):
+def test_long_picker_scrolls_within_the_screen(
+    settings, config_path, long_catalog, step, last_label, choice_id, columns_id, control
+):
     """Keep the last choice reachable and headers fixed, including after a terminal resize."""
 
     async def scenario(pilot):
@@ -55,16 +62,16 @@ def test_long_picker_scrolls_within_the_screen(settings, config_path, long_catal
             await settle(pilot)
 
         screen = pilot.app.screen
-        choice = screen.query_one(OptionList)
+        choice = screen.query_one(choice_id, OptionList)
         for width, height in ((120, 30), (80, 16)):
             await pilot.resize_terminal(width, height)
             await pilot.press("home")
-            header_region = screen.query_one("#columns").region
+            header_region = screen.query_one(columns_id).region
             await scroll_picker(pilot, choice, control, down=True)
 
             assert choice.scroll_y > 0
             assert screen.scroll_y == 0
-            assert screen.query_one("#columns").region == header_region
+            assert screen.query_one(columns_id).region == header_region
             assert choice.region.bottom <= screen.query_one("#keys").region.y
             assert last_label in choice.render_line(choice.content_size.height - 1).text
 
@@ -223,13 +230,13 @@ def test_limit_choices_fit_a_small_screen(settings, config_path, long_catalog):
         await pilot.press("enter")
         await pilot.resize_terminal(80, 12)
         screen = pilot.app.screen
-        choice = screen.query_one(OptionList)
+        choice = screen.query_one("#step-choice", OptionList)
         assert choice.region.bottom <= screen.query_one("#keys").region.y
         assert "TTL" in choice.render_line(0).text
         assert "Budget (USD)" in choice.render_line(1).text
         await pilot.press("end", "enter")
         assert screen.step == "budget"
-        assert screen.query_one(Input).has_focus
+        assert screen.query_one("#limit", Input).has_focus
 
     run_app(GallocApp(settings, config_path), scenario)
 

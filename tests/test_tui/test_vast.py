@@ -9,8 +9,10 @@ from textual.widgets import DataTable, Input, OptionList
 from galloc.core import storage
 from galloc.core.schemas import GPU
 from galloc.settings import Settings, load_settings
+from galloc.tui.add import AddScreen
 from galloc.tui.app import GallocApp
 from galloc.tui.gpu_list import GPUListScreen
+from galloc.tui.message import Message
 from tests.conftest import SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
@@ -44,7 +46,6 @@ def test_vast_setup_uses_its_credentials_and_shared_defaults(settings, config_pa
     saved = load_settings(config_path)
     assert saved.provider == "vast"
     assert saved.disk_gb == saved.vast_disk_gb == 80
-    assert saved.vast_ssh_public_key == public_key_path
     assert saved.runpod_api_key is None
     assert all(call.args[0].headers["Authorization"] == "Bearer entered-vast-key" for call in vast_http.call_args_list)
     assert json.loads(vast_http.call_args.args[0].content) == {"ssh_key": SSH_PUBLIC_KEY}
@@ -81,7 +82,7 @@ def test_vast_setup_rejects_invalid_credentials(settings, config_path, vast_http
 
 @pytest.mark.parametrize("budget", [False, True])
 def test_vast_add_and_deadline_on_another_screen(
-    tmp_path, config_path, vast_http, vast_offer_data, vast_instance_data, monkeypatch, budget
+    tmp_path, config_path, vast_http, vast_offer_data, vast_instance_data, monkeypatch, budget, local_key
 ):
     """Select an exact offer, wait for readiness, then expire it while the SSH-key screen is open."""
 
@@ -97,7 +98,7 @@ def test_vast_add_and_deadline_on_another_screen(
         if request.url.path.endswith("bundles/"):
             return httpx.Response(200, json={"offers": [vast_offer_data]})
         if request.url.path.endswith("ssh/"):
-            return httpx.Response(200, json=[])
+            return httpx.Response(200, json=[{"id": 1, "key": local_key.public_key}])
         if request.method == "PUT":
             assert request.url.path.endswith("asks/1234/")
             return httpx.Response(200, json={"success": True, "new_contract": 5678})
@@ -113,7 +114,7 @@ def test_vast_add_and_deadline_on_another_screen(
 
         await pilot.press("a")
         await settle(pilot)
-        row = pilot.app.screen.query_one(OptionList).get_option_at_index(0).prompt
+        row = pilot.app.screen.query_one("#choice", OptionList).get_option_at_index(0).prompt
         assert "RTX 4090" in row and "#" not in row and "ϟ" in row and "Available" in row
         await pilot.press("enter")
         await settle(pilot)
@@ -121,7 +122,7 @@ def test_vast_add_and_deadline_on_another_screen(
         if budget:
             await pilot.press("down")
         await pilot.press("enter")
-        pilot.app.screen.query_one(Input).value = "2.5" if budget else "30m"
+        pilot.app.screen.query_one("#limit", Input).value = "2.5" if budget else "30m"
         await pilot.press("enter")
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
@@ -142,6 +143,53 @@ def test_vast_add_and_deadline_on_another_screen(
             assert storage.get_gpu_list(connection) == []
 
     run_app(GallocApp(settings, config_path), scenario)
+
+
+def test_failure_before_the_rental_request_returns_to_gpu_selection(
+    tmp_path, config_path, vast_http, vast_offer_data, local_key
+):
+    """Choose again with the reason shown when the start fails before anything is rented."""
+
+    config_path.touch()
+    settings = Settings(provider="vast", vast_api_key=SecretStr("vast-token"), database_path=tmp_path / "state.db")
+    lookup_count = 0
+
+    def handler(request):
+        """Serve the marketplace, then an unreadable answer to the final check of the chosen offer."""
+
+        nonlocal lookup_count
+        if request.url.path.endswith("ssh/"):
+            return httpx.Response(200, json=[{"id": 1, "key": local_key.public_key}])
+        assert (request.method, request.url.path) == ("POST", "/api/v0/bundles/")
+        if "ask_contract_id" not in json.loads(request.content):
+            return httpx.Response(200, json={"offers": [vast_offer_data]})
+
+        lookup_count += 1
+        if lookup_count == 2:
+            return httpx.Response(200, json={"offers": [{"id": 1234}]})
+        return httpx.Response(200, json={"offers": [vast_offer_data]})
+
+    vast_http.side_effect = handler
+
+    async def scenario(pilot):
+        """Submit a complete selection whose final validation cannot be read."""
+
+        await pilot.press("a")
+        await settle(pilot)
+        await pilot.press("enter")
+        await settle(pilot)
+        await pilot.press("enter", "enter", "1", "h", "enter")
+        await settle(pilot)
+
+        screen = pilot.app.screen
+        assert isinstance(screen, AddScreen)
+        assert screen.step == "gpu"
+        assert screen.query_one("#choice", OptionList).option_count == 1
+        assert "invalid response to POST /api/v0/bundles/ (offers.0.gpu_name" in screen.query_one(Message).content
+
+    run_app(GallocApp(settings, config_path), scenario)
+    with storage.open_database(settings.database_path) as connection:
+        assert storage.get_gpu_list(connection) == []
 
 
 def test_startup_expires_both_providers(

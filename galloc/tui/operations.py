@@ -14,7 +14,7 @@ from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_creation, prepare_extension, prepare_instance_operation
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable
-from galloc.providers.factory import PROVIDER_NAME_LIST, get_ssh_public_key_path, is_configured, open_provider
+from galloc.providers.factory import PROVIDER_NAME_LIST, is_configured, open_provider
 from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
 from galloc.settings import Settings
 
@@ -32,42 +32,38 @@ def load_gpu_list(settings: Settings) -> list[tuple[GPU, Instance]]:
     return result_list
 
 
-def load_gpu_model_list(settings: Settings) -> list[GPUModel]:
-    """Read the GPU models the configured provider can create now."""
+def load_gpu_model_list(settings: Settings, provider_name: str) -> list[GPUModel]:
+    """List what one provider can create now."""
 
-    with open_provider(settings, settings.provider) as provider:
-        gpu_model_list = provider.get_gpu_list()
-
-    if not gpu_model_list:
-        raise GPUUnavailable(f"No GPUs currently available for {settings.provider}.")
-    return gpu_model_list
+    with open_provider(settings, provider_name) as provider:
+        return provider.get_gpu_list()
 
 
-def load_region_list(settings: Settings, gpu_model: str) -> list[Region]:
-    """Read the regions that currently have capacity for the chosen GPU model."""
+def load_region_list(settings: Settings, provider_name: str, gpu_model: str) -> list[Region]:
+    """Read the provider's regions that currently have capacity for the chosen GPU model."""
 
-    with open_provider(settings, settings.provider) as provider:
+    with open_provider(settings, provider_name) as provider:
         region_list = provider.get_region_list(gpu_model)
 
     if not region_list:
-        raise GPUUnavailable(f"No regions currently available for {gpu_model} on {settings.provider}.")
+        raise GPUUnavailable(f"No regions currently available for {gpu_model} on {provider_name}.")
     return region_list
 
 
 def create(
-    settings: Settings, gpu_model: str, region: str, ttl: str | None = None, budget: str | None = None
+    settings: Settings,
+    provider_name: str,
+    gpu_model: str,
+    region: str,
+    ttl: str | None = None,
+    budget: str | None = None,
 ) -> tuple[GPU, Instance]:
-    """Create a billable GPU with the configured provider and name an uncertain result."""
+    """Create a billable GPU with the chosen provider and name an uncertain result."""
 
-    provider_name = settings.provider
-    public_key_path = get_ssh_public_key_path(settings, provider_name)
-    ssh_key = read_public_key(public_key_path) if public_key_path is not None else None
     with open_database(settings.database_path) as connection, open_provider(settings, provider_name) as provider:
         creation = prepare_creation(
             connection, provider, provider_name=provider_name, gpu=gpu_model, region=region, ttl=ttl, budget=budget
         )
-        if ssh_key is not None:
-            provider.create_ssh_key(ssh_key)
         try:
             gpu, instance = services.create_gpu(connection, provider, creation)
         except CreationRejected:
@@ -130,11 +126,10 @@ def load_ssh_key_list(settings: Settings) -> tuple[list[tuple[str, SSHKey]], lis
     return result_list, error_list
 
 
-def add_ssh_key(settings: Settings, public_key_path: Path) -> str:
-    """Register a public key file with the configured provider and describe the outcome."""
+def add_ssh_key(settings: Settings, ssh_key: SSHKey, *, provider_name: str | None = None) -> str:
+    """Register a public key with the specified provider, or the default for standalone key management."""
 
-    ssh_key = read_public_key(public_key_path)
-    with open_provider(settings, settings.provider) as provider:
+    with open_provider(settings, provider_name or settings.provider) as provider:
         created = provider.create_ssh_key(ssh_key)
 
     status = "Registered" if created else "Already registered"
@@ -157,16 +152,10 @@ def check_api_key(settings: Settings) -> None:
 
 
 def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path) -> None:
-    """Register the selected public key, then save the complete configuration."""
+    """Register the selected public key, then save the configuration, which does not record the key."""
 
-    add_ssh_key(settings, public_key_path)
-    save_config(
-        config_path,
-        provider_name=settings.provider,
-        api_key=api_key,
-        disk_gb=settings.disk_gb,
-        ssh_public_key_path=public_key_path,
-    )
+    add_ssh_key(settings, read_public_key(public_key_path))
+    save_config(config_path, provider_name=settings.provider, api_key=api_key, disk_gb=settings.disk_gb)
 
 
 def save_api_key(settings: Settings, config_path: Path, provider_name: str, api_key: str) -> Settings:

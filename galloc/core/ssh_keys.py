@@ -26,6 +26,17 @@ def read_public_key(path: Path) -> SSHKey:
     return parse_public_key(value)
 
 
+def read_local_key_pair(public_key_path: Path) -> SSHKey:
+    """Require a public key and its local private file before using them for GPU access."""
+
+    if public_key_path.suffix != ".pub":
+        raise InvalidSSHKey("Choose a .pub file with its private key beside it.")
+    private_key_path = public_key_path.with_suffix("")
+    if not private_key_path.is_file():
+        raise InvalidSSHKey(f"Private key not found: {private_key_path}. Choose a key pair or generate one.")
+    return read_public_key(public_key_path)
+
+
 def format_ssh_command(command: str | None, public_key_path: Path | None) -> str | None:
     """Use the chosen local identity without changing the provider's host, port, or other SSH options."""
 

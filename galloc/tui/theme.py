@@ -71,21 +71,28 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
     height: auto;
 }
 
-#prompt, #limit, #choice {
+#prompt, #choice, #search, #step-choice, #limit {
     margin: 1 0;
 }
 
-#columns {
+#columns, #step-columns {
     height: auto;
-    margin-top: 1;
     color: $muted;
 }
 
-AddScreen #choice {
+AddScreen #progress {
+    margin-bottom: 1;
+}
+
+AddScreen #choice, AddScreen #step-choice {
     margin-top: 0;
 }
 
-#note {
+AddScreen Message, ProviderListScreen Message {
+    margin-top: 1;
+}
+
+#note, AddScreen #preview {
     color: $muted;
 }
 

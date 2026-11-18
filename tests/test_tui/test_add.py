@@ -25,13 +25,15 @@ DATA_CENTER_RESPONSE = {
 }
 
 
-def serve_catalog(request, pod_data):
+def serve_catalog(request, pod_data, public_key=None):
     """Answer catalog reads, Pod creation, and the list reload that follows it."""
 
     if request.url.path.endswith("catalog/gpus"):
         return httpx.Response(200, json={"gpus": [make_gpu_data()]})
     if request.url.path.endswith("catalog/datacenters"):
         return httpx.Response(200, json=DATA_CENTER_RESPONSE)
+    if request.url.path.endswith("account/ssh-keys"):
+        return httpx.Response(200, json={"keys": [public_key] if public_key else []})
     if request.method == "POST":
         return httpx.Response(201, json=pod_data)
     return httpx.Response(200, json=pod_data)
@@ -51,31 +53,33 @@ def test_empty_list_shows_the_key_that_adds_a_gpu(settings, config_path, runpod_
     runpod_http.assert_not_called()
 
 
-def test_add_creates_the_chosen_gpu_and_shows_it_in_the_list(settings, config_path, runpod_http, pod_data):
+def test_add_creates_the_chosen_gpu_and_shows_it_in_the_list(settings, config_path, runpod_http, pod_data, local_key):
     """Choose the model and the second region, enter a TTL, and return to the list."""
 
     config_path.touch()
-    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
+    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
 
     async def scenario(pilot):
         """Walk through GPU, region, and TTL with the keyboard."""
 
         await pilot.press("a")
         await settle(pilot)
-        choice = pilot.app.screen.query_one(OptionList)
+        choice = pilot.app.screen.query_one("#choice", OptionList)
         row = choice.get_option_at_index(0).prompt
         columns = pilot.app.screen.query_one("#columns", Static).content
-        assert columns.split() == ["GPU", "USD/HOUR", "VRAM", "(GB)", "STOCK"]
+        assert columns.split() == ["GPU", "USD/HOUR", "VRAM", "(GB)", "STOCK", "PROVIDER"]
+        assert row.index("runpod") == columns.index("PROVIDER")
+        assert row.index("H200") == columns.index("GPU")
         assert row.index("$5.29") == columns.index("USD/HOUR")
         assert row.index("141") == columns.index("VRAM")
         assert row.index("High") == columns.index("STOCK")
 
         await pilot.press("enter")
         await settle(pilot)
-        assert pilot.app.screen.query_one("#columns", Static).content.split() == ["ID", "LOCATION"]
+        assert pilot.app.screen.query_one("#step-columns", Static).content.split() == ["ID", "LOCATION"]
         await pilot.press("down", "enter", "enter", "2", "h")
-        assert not pilot.app.screen.query_one("#columns", Static).display
-        assert "about $10.58" in pilot.app.screen.query_one("#note", Static).content
+        assert not pilot.app.screen.query_one("#step-columns", Static).display
+        assert "about $10.58" in pilot.app.screen.query_one("#preview", Static).content
 
         await pilot.press("enter")
         await settle(pilot)
@@ -94,11 +98,11 @@ def test_add_creates_the_chosen_gpu_and_shows_it_in_the_list(settings, config_pa
     assert timedelta(minutes=119) < gpu.expires_at - datetime.now(UTC) <= timedelta(hours=2)
 
 
-def test_invalid_ttl_keeps_the_add_screen_open(settings, config_path, runpod_http, pod_data):
+def test_invalid_ttl_keeps_the_add_screen_open(settings, config_path, runpod_http, pod_data, local_key):
     """Refuse a TTL that cannot be parsed before anything is created."""
 
     config_path.touch()
-    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
+    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
 
     async def scenario(pilot):
         """Enter a duration without a unit."""
@@ -140,7 +144,7 @@ def test_refresh_replaces_the_catalog_and_marks_cheap_gpus(settings, config_path
 
         await pilot.press("a")
         await settle(pilot)
-        choice = pilot.app.screen.query_one(OptionList)
+        choice = pilot.app.screen.query_one("#choice", OptionList)
         assert choice.option_count == 1
         assert "refresh" in pilot.app.screen.query_one("#keys", Static).content
 
@@ -175,7 +179,7 @@ def test_failed_catalog_refresh_can_be_retried(settings, config_path, runpod_htt
         await settle(pilot)
         await pilot.press("r")
         await settle(pilot)
-        choice = pilot.app.screen.query_one(OptionList)
+        choice = pilot.app.screen.query_one("#choice", OptionList)
         assert choice.option_count == 0
         assert "500" in pilot.app.screen.query_one(Message).content
 
@@ -189,7 +193,7 @@ def test_failed_catalog_refresh_can_be_retried(settings, config_path, runpod_htt
     assert runpod_http.call_count == 3
 
 
-def test_unresolved_creation_names_the_pod_to_check(settings, config_path, runpod_http, pod_data):
+def test_unresolved_creation_names_the_pod_to_check(settings, config_path, runpod_http, pod_data, local_key):
     """Keep the reserved mapping and say where to look when the provider gives no clear answer."""
 
     config_path.touch()
@@ -199,7 +203,7 @@ def test_unresolved_creation_names_the_pod_to_check(settings, config_path, runpo
 
         if request.method == "POST":
             return httpx.Response(500)
-        return serve_catalog(request, pod_data)
+        return serve_catalog(request, pod_data, local_key.public_key)
 
     runpod_http.side_effect = handler
 
@@ -252,7 +256,7 @@ def test_add_closed_during_a_catalog_read_changes_nothing(settings, config_path,
     runpod_http.assert_called_once()
 
 
-def test_quitting_during_creation_saves_the_returned_instance(settings, config_path, runpod_http, pod_data):
+def test_quitting_during_creation_saves_the_returned_instance(settings, config_path, runpod_http, pod_data, local_key):
     """Finish an already submitted creation and save its mapping even if the interface closes."""
 
     config_path.touch()
@@ -265,14 +269,14 @@ def test_quitting_during_creation_saves_the_returned_instance(settings, config_p
         if request.method == "POST":
             request_started.set()
             answer_allowed.wait(timeout=5)
-        return serve_catalog(request, pod_data)
+        return serve_catalog(request, pod_data, local_key.public_key)
 
     runpod_http.side_effect = handler
 
     async def scenario(pilot):
         """Quit with a creation in flight and then let the provider finish it."""
 
-        pilot.app.push_screen(StartupScreen("H200", "US-KS-2", "1h", None))
+        pilot.app.push_screen(StartupScreen("runpod", "H200", "US-KS-2", "1h", None))
         assert await asyncio.to_thread(request_started.wait, 5)
         try:
             await pilot.press("ctrl+q")
@@ -290,7 +294,9 @@ def test_quitting_during_creation_saves_the_returned_instance(settings, config_p
     assert sum(call.args[0].method == "POST" for call in runpod_http.call_args_list) == 1
 
 
-def test_fractional_budget_previews_ttl_and_recalculates_before_creation(settings, config_path, runpod_http, pod_data):
+def test_fractional_budget_previews_ttl_and_recalculates_before_creation(
+    settings, config_path, runpod_http, pod_data, local_key
+):
     """Round down a fractional budget using the latest price when creation is validated."""
 
     config_path.touch()
@@ -304,7 +310,7 @@ def test_fractional_budget_previews_ttl_and_recalculates_before_creation(setting
             catalog_reads += 1
             price = 5.29 if catalog_reads < 3 else 10
             return httpx.Response(200, json={"gpus": [make_gpu_data(price={"secure": price})]})
-        return serve_catalog(request, pod_data)
+        return serve_catalog(request, pod_data, local_key.public_key)
 
     runpod_http.side_effect = handler
 
@@ -316,7 +322,7 @@ def test_fractional_budget_previews_ttl_and_recalculates_before_creation(setting
         await pilot.press("enter")
         await settle(pilot)
         await pilot.press("enter", "down", "enter", "2", ".", "5")
-        assert "28m" in pilot.app.screen.query_one("#note", Static).content
+        assert "28m" in pilot.app.screen.query_one("#preview", Static).content
         await pilot.press("enter")
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
@@ -330,27 +336,111 @@ def test_fractional_budget_previews_ttl_and_recalculates_before_creation(setting
 
 
 @pytest.mark.parametrize("budget", ["0", "-1", "NaN", "0.001"])
-def test_invalid_budget_keeps_input_editable(settings, config_path, runpod_http, pod_data, budget):
+def test_invalid_budget_keeps_input_editable(settings, config_path, runpod_http, pod_data, budget, local_key):
     """Reject nonpositive, nonfinite, and sub-minute amounts without creating a Pod."""
 
     config_path.touch()
-    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
+    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
 
     async def scenario(pilot):
-        """Enter an invalid budget and then cancel the unchanged creation flow."""
+        """Enter an invalid budget and stay on its input."""
 
         await pilot.press("a")
         await settle(pilot)
         await pilot.press("enter")
         await settle(pilot)
         await pilot.press("enter", "down", "enter")
-        pilot.app.screen.query_one(Input).value = budget
+        pilot.app.screen.query_one("#limit", Input).value = budget
         await pilot.press("enter")
         assert isinstance(pilot.app.screen, AddScreen)
         assert pilot.app.screen.query_one(Message).content
-        assert not pilot.app.screen.query_one(Input).disabled
+        assert not pilot.app.screen.query_one("#limit", Input).disabled
+
+    run_app(GallocApp(settings, config_path), scenario)
+    assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
+
+
+def test_escape_returns_to_the_previous_step(settings, config_path, runpod_http, pod_data, local_key):
+    """Undo one answer per key press with the cursor on it, and leave only from GPU selection."""
+
+    config_path.touch()
+    runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
+
+    async def scenario(pilot):
+        """Choose the model, the second region, and a budget, then step back through all of them."""
+
+        await pilot.press("a")
+        await settle(pilot)
+        await pilot.press("enter")
+        await settle(pilot)
+        await pilot.press("down", "enter", "down", "enter", "2", ".", "5")
+        screen = pilot.app.screen
+        progress, choice = screen.query_one("#progress", Static), screen.query_one("#step-choice", OptionList)
+        assert "Estimated TTL" in screen.query_one("#preview", Static).content
+        request_count = runpod_http.call_count
+
+        await pilot.press("escape")
+        assert progress.content.endswith("TTL or budget")
+        assert (choice.display, choice.highlighted) == (True, 1)
+        assert not screen.query_one("#limit", Input).display
+        assert screen.query_one("#preview", Static).content == ""
+
+        await pilot.press("escape")
+        assert progress.content.endswith("Region")
+        assert "EU-NL-1" in choice.get_option_at_index(choice.highlighted).prompt
+
+        await pilot.press("escape")
+        assert progress.content.endswith("GPU")
+        gpu_choice = screen.query_one("#choice", OptionList)
+        assert "H200" in gpu_choice.get_option_at_index(gpu_choice.highlighted).prompt
+        assert "refresh" in screen.query_one("#keys", Static).content
+        assert runpod_http.call_count == request_count
+
         await pilot.press("escape")
         assert isinstance(pilot.app.screen, GPUListScreen)
 
     run_app(GallocApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
+
+
+def test_escape_while_regions_load_returns_to_gpu_selection(settings, config_path, runpod_http, pod_data, local_key):
+    """Drop a region read the user stepped back from, so its late answer cannot reopen the region step."""
+
+    config_path.touch()
+    request_started = threading.Event()
+    answer_allowed = threading.Event()
+
+    def handler(request):
+        """Hold only the region answer until the user has stepped back."""
+
+        if request.url.path.endswith("catalog/datacenters"):
+            request_started.set()
+            answer_allowed.wait(timeout=5)
+        return serve_catalog(request, pod_data, local_key.public_key)
+
+    runpod_http.side_effect = handler
+
+    async def scenario(pilot):
+        """Select a model, see the region wait in the detail column, and step back before its regions arrive."""
+
+        await pilot.press("a")
+        await settle(pilot)
+        await pilot.press("enter")
+        assert await asyncio.to_thread(request_started.wait, 5)
+        await pilot.pause()
+        info = pilot.app.screen.query_one("#info", Static)
+        assert "loading regions" in info.render_line(2).text
+        try:
+            await pilot.press("escape")
+        finally:
+            answer_allowed.set()
+        await settle(pilot)
+        assert info.size.height == 1
+
+        screen = pilot.app.screen
+        assert isinstance(screen, AddScreen)
+        assert screen.query_one("#progress", Static).content.endswith("GPU")
+        assert not screen.query_one("#choice", OptionList).disabled
+        assert screen.query_one("#columns", Static).content.split()[0] == "GPU"
+
+    run_app(GallocApp(settings, config_path), scenario)

@@ -187,7 +187,7 @@ class GPUListScreen(Screen):
 
         self.app.push_screen(AddScreen(error), self._create_gpu)
 
-    def _create_gpu(self, selection: tuple[str, str, str | None, str | None] | CreationRejected | None) -> None:
+    def _create_gpu(self, selection: tuple[str, str, str, str | None, str | None] | CreationRejected | None) -> None:
         """Open startup progress for the chosen GPU; a cancelled selection creates nothing."""
 
         if selection is None:
@@ -198,10 +198,10 @@ class GPUListScreen(Screen):
 
         self.app.push_screen(StartupScreen(*selection), self._show_created_gpu)
 
-    def _show_created_gpu(self, message: str | CreationRejected | None) -> None:
-        """Restart selection after a refusal; otherwise report the outcome and reload the list."""
+    def _show_created_gpu(self, message: str | GallocError | None) -> None:
+        """Restart selection after a start that created nothing; otherwise report the outcome and reload the list."""
 
-        if isinstance(message, CreationRejected):
+        if isinstance(message, GallocError):
             self.action_add(str(message))
             return
 

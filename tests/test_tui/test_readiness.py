@@ -39,7 +39,7 @@ def test_startup_shows_spinner_until_runtime_and_ssh_are_ready(settings, config_
     async def scenario(pilot):
         """Observe startup before allowing it to finish and reveal the SSH command."""
 
-        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
+        pilot.app.screen._create_gpu(("runpod", "H200", "US-KS-2", "1h", None))
         assert await asyncio.to_thread(status_requested.wait, 5)
         await pilot.pause()
         assert isinstance(pilot.app.screen, StartupScreen)
@@ -77,7 +77,7 @@ def test_startup_failure_keeps_mapping_and_shows_error(settings, config_path, ru
     async def scenario(pilot):
         """Wait for the failed status check and inspect its inline error."""
 
-        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
+        pilot.app.screen._create_gpu(("runpod", "H200", "US-KS-2", "1h", None))
         await settle(pilot)
         assert isinstance(pilot.app.screen, StartupScreen)
         assert "gpu-1:" in pilot.app.screen.query_one(Message).content
@@ -101,7 +101,7 @@ def test_startup_timeout_uses_configured_limit(settings, config_path, runpod_htt
     async def scenario(pilot):
         """Observe a named timeout instead of a ready result."""
 
-        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
+        pilot.app.screen._create_gpu(("runpod", "H200", "US-KS-2", "1h", None))
         await settle(pilot)
         assert "not ready after 1 seconds" in pilot.app.screen.query_one(Message).content
 
@@ -129,7 +129,7 @@ def test_escape_stops_waiting_without_deleting_gpu(settings, config_path, runpod
     async def scenario(pilot):
         """Return to the GPU list while the startup worker is sleeping."""
 
-        pilot.app.screen._create_gpu(("H200", "US-KS-2", "1h", None))
+        pilot.app.screen._create_gpu(("runpod", "H200", "US-KS-2", "1h", None))
         assert await asyncio.to_thread(status_requested.wait, 5)
         await pilot.press("escape")
         await asyncio.wait_for(settle(pilot), timeout=3)

@@ -10,7 +10,9 @@ from tests.test_tui.test_add import serve_catalog
 
 
 @pytest.mark.parametrize("step", ["gpu", "region"])
-def test_typing_during_catalog_loading_does_not_enter_the_limit(settings, config_path, runpod_http, pod_data, step):
+def test_typing_during_catalog_loading_does_not_enter_the_limit(
+    settings, config_path, runpod_http, pod_data, step, local_key
+):
     """Keep letters away from hidden inputs while catalog requests are in flight."""
 
     config_path.touch()
@@ -27,7 +29,7 @@ def test_typing_during_catalog_loading_does_not_enter_the_limit(settings, config
             if catalog_reads == (1 if step == "gpu" else 2):
                 request_started.set()
                 answer_allowed.wait(timeout=5)
-        return serve_catalog(request, pod_data)
+        return serve_catalog(request, pod_data, local_key.public_key)
 
     runpod_http.side_effect = handler
 
@@ -41,7 +43,7 @@ def test_typing_during_catalog_loading_does_not_enter_the_limit(settings, config
         assert await asyncio.to_thread(request_started.wait, 5)
         try:
             await pilot.press("d", "f", "j", "k", "a", "r", "x", "tab", "enter")
-            assert pilot.app.screen.query_one(Input).value == ""
+            assert pilot.app.screen.query_one("#limit", Input).value == ""
         finally:
             answer_allowed.set()
         await settle(pilot)
@@ -49,7 +51,7 @@ def test_typing_during_catalog_loading_does_not_enter_the_limit(settings, config
             await pilot.press("enter")
             await settle(pilot)
         await pilot.press("enter", "enter", "1", "h")
-        assert "about $5.29" in pilot.app.screen.query_one("#note", Static).content
+        assert "about $5.29" in pilot.app.screen.query_one("#preview", Static).content
 
     run_app(GallocApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)

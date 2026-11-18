@@ -47,7 +47,6 @@ def test_first_launch_registers_an_existing_key_and_saves_configuration(settings
 
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert pilot.app.settings.runpod_api_key.get_secret_value() == "entered-token"
-        assert pilot.app.settings.ssh_public_key == public_key_path
         assert pilot.app.settings.disk_gb == 100
 
     run_app(GallocApp(settings, config_path), scenario)
@@ -57,7 +56,7 @@ def test_first_launch_registers_an_existing_key_and_saves_configuration(settings
     assert json.loads(write_call.args[0].content) == {"keys": [SSH_PUBLIC_KEY]}
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
     assert tomllib.loads(config_path.read_text()) == {
-        "defaults": {"provider": "runpod", "disk_gb": 100, "ssh_public_key": str(public_key_path)},
+        "defaults": {"provider": "runpod", "disk_gb": 100},
         "providers": {"runpod": {"api_key": "entered-token"}},
     }
 
@@ -160,13 +159,12 @@ def test_custom_key_path_and_disk_are_shared_with_cli(settings, config_path, run
         await pilot.press("enter")
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
-        assert pilot.app.settings.ssh_public_key == public_key_path
         assert pilot.app.settings.disk_gb == 64
 
     run_app(GallocApp(settings, config_path), scenario)
     saved_settings = load_settings(config_path)
     assert saved_settings.disk_gb == saved_settings.runpod_disk_gb == 64
-    assert saved_settings.ssh_public_key == saved_settings.runpod_ssh_public_key == public_key_path
+    assert "ssh_public_key" not in config_path.read_text()
     assert json.loads(runpod_http.call_args.args[0].content) == {"keys": [OTHER_SSH_PUBLIC_KEY, SSH_PUBLIC_KEY]}
 
 

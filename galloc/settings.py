@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import BaseModel, PositiveFloat, PositiveInt, SecretStr, field_validator
+from pydantic import BaseModel, PositiveFloat, PositiveInt, SecretStr
 
 from galloc.config import read_config
 
@@ -37,13 +37,6 @@ class Settings(BaseModel):
     vast_image: str = "vastai/base-image:@vastai-automatic-tag"
     vast_disk_gb: PositiveInt | None = None
     vast_ssh_public_key: Path | None = None
-
-    @field_validator("ssh_public_key", "runpod_ssh_public_key", "vast_ssh_public_key")
-    @classmethod
-    def expand_key_path(cls, value: Path | None) -> Path | None:
-        """Resolve home-relative public key paths before they reach an operation."""
-
-        return value.expanduser() if value is not None else None
 
 
 def load_settings(config_path: Path) -> Settings:

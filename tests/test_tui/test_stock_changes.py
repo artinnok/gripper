@@ -2,7 +2,7 @@ import json
 
 import httpx
 import pytest
-from textual.widgets import Input, OptionList
+from textual.widgets import Input, OptionList, Static
 
 from galloc.core import storage
 from galloc.tui.add import AddScreen
@@ -16,7 +16,9 @@ from tests.test_tui.test_add import serve_catalog
 
 @pytest.mark.parametrize("stage", ["region", "validation", "creation"])
 @pytest.mark.parametrize("mode", ["ttl", "budget"])
-def test_unavailable_gpu_restarts_add_from_scratch(settings, config_path, runpod_http, pod_data, stage, mode):
+def test_unavailable_gpu_restarts_add_from_scratch(
+    settings, config_path, runpod_http, pod_data, stage, mode, local_key
+):
     """Reload the first step on refusal and require fresh GPU, region, and limit choices."""
 
     config_path.touch()
@@ -30,7 +32,7 @@ def test_unavailable_gpu_restarts_add_from_scratch(settings, config_path, runpod
             return httpx.Response(200, json={"gpus": [make_gpu_data(availability="NONE", dataCenters=[]), replacement]})
         if request.method == "POST" and stage == "creation":
             return httpx.Response(400, json={"error": "No capacity available"})
-        return serve_catalog(request, pod_data)
+        return serve_catalog(request, pod_data, local_key.public_key)
 
     runpod_http.side_effect = handler
 
@@ -60,22 +62,22 @@ def test_unavailable_gpu_restarts_add_from_scratch(settings, config_path, runpod
         assert screen.step == "gpu"
         assert screen.selected_gpu_model is None
         assert screen.selected_region is None
-        assert screen.query_one(Input).value == ""
+        assert screen.query_one("#limit", Input).value == ""
         assert screen.query_one(Message).content
-        assert not screen.query_one(OptionList).disabled
+        assert not screen.query_one("#choice", OptionList).disabled
         assert len(pilot.app.screen_stack) == 3
         if sold_out:
-            assert "RTX A4000" in screen.query_one(OptionList).get_option_at_index(0).prompt
+            assert "RTX A4000" in screen.query_one("#choice", OptionList).get_option_at_index(0).prompt
         with storage.open_database(settings.database_path) as connection:
             assert storage.get_gpu_list(connection) == []
 
-        runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
+        runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
         await pilot.press("r")
         await settle(pilot)
         await pilot.press("enter")
         await settle(pilot)
         await pilot.press("enter", "enter")
-        assert screen.query_one(Input).value == ""
+        assert screen.query_one("#limit", Input).value == ""
         await pilot.press("1", "h", "enter")
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
@@ -86,12 +88,13 @@ def test_unavailable_gpu_restarts_add_from_scratch(settings, config_path, runpod
     assert json.loads(creation_request_list[-1].content)["gpu"]["id"] == "NVIDIA H200"
 
 
-def test_empty_catalog_after_refusal_waits_for_manual_refresh(settings, config_path, runpod_http, pod_data):
+def test_empty_catalog_after_refusal_waits_for_manual_refresh(settings, config_path, runpod_http, pod_data, local_key):
     """Stop at the empty first step when all stock disappears, without a retry loop."""
 
     config_path.touch()
     runpod_http.side_effect = [
         httpx.Response(200, json={"gpus": [make_gpu_data()]}),
+        httpx.Response(200, json={"keys": [local_key.public_key]}),
         httpx.Response(200, json={"gpus": [make_gpu_data(availability="NONE", dataCenters=[])]}),
         httpx.Response(200, json={"gpus": []}),
     ]
@@ -105,13 +108,14 @@ def test_empty_catalog_after_refusal_waits_for_manual_refresh(settings, config_p
         await settle(pilot)
         screen = pilot.app.screen
         assert isinstance(screen, AddScreen)
-        assert screen.query_one(OptionList).option_count == 0
-        assert "No GPUs" in screen.query_one(Message).content
-        assert runpod_http.call_count == 3
+        assert screen.query_one("#choice", OptionList).option_count == 0
+        assert screen.query_one("#info", Static).render_line(0).text.split() == ["runpod", "no", "GPUs"]
+        assert "currently unavailable" in screen.query_one(Message).content
+        assert runpod_http.call_count == 4
 
-        runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
+        runpod_http.side_effect = lambda request: serve_catalog(request, pod_data, local_key.public_key)
         await pilot.press("r")
         await settle(pilot)
-        assert screen.query_one(OptionList).option_count == 1
+        assert screen.query_one("#choice", OptionList).option_count == 1
 
     run_app(GallocApp(settings, config_path), scenario)

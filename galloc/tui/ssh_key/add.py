@@ -9,10 +9,13 @@ from textual.markup import escape
 from textual.screen import Screen
 from textual.widgets import Input, OptionList, Static
 
-from galloc.core.ssh_keys import generate_key_pair, read_public_key
+from galloc.core.ssh_keys import generate_key_pair, read_local_key_pair, read_public_key
 from galloc.exceptions import GallocError
+from galloc.providers.schemas import GPUModel
 from galloc.tui import operations
+from galloc.tui.add_steps import AddStep, format_progress
 from galloc.tui.message import Message
+from galloc.tui.ssh_key.access import remember_key
 from galloc.tui.ssh_key.details import format_ssh_key
 
 
@@ -28,14 +31,16 @@ PATH_NOTE_MAP = {"path": "", "generate": "Ed25519 · no passphrase"}
 
 
 class SSHKeyAddScreen(Screen[str | None]):
-    """Choose an existing public key or generate a pair before registering it with the provider."""
+    """Register a public key, either independently or as the access step before adding a GPU."""
 
     BINDINGS = [Binding("escape", "back", "Back"), Binding("r", "refresh", "Refresh")]
 
-    def __init__(self) -> None:
+    def __init__(self, provider_name: str | None = None, *, gpu_model: GPUModel | None = None) -> None:
         """Start with local key selection and no registration in progress."""
 
         super().__init__()
+        self.provider_name = provider_name
+        self.gpu_model = gpu_model
         self.mode = "choose"
         self.public_key_path_list: list[Path] = []
         self.preview_path: Path | None = None
@@ -44,7 +49,12 @@ class SSHKeyAddScreen(Screen[str | None]):
     def compose(self) -> ComposeResult:
         """Keep choices and path entry on the left, with selected-key details on the right."""
 
-        yield Static("[b $primary]galloc[/] [$muted]· ssh keys · add[/]", id="header")
+        provider_name = self.provider_name or self.app.settings.provider
+        title = "add" if self.gpu_model is not None else f"ssh keys · add to {provider_name}"
+        yield Static(f"[b $primary]galloc[/] [$muted]· {escape(title)}[/]", id="header")
+        if self.gpu_model is not None:
+            yield Static(format_progress(AddStep.SSH_KEY, provider_name, self.gpu_model, None), id="progress")
+
         with Horizontal():
             with Vertical(id="key-source"):
                 yield Static("Local public keys", id="path-label")
@@ -155,7 +165,15 @@ class SSHKeyAddScreen(Screen[str | None]):
             if generate:
                 path = await asyncio.to_thread(generate_key_pair, path)
                 self._show_path("path", str(path))
-            message = await asyncio.to_thread(operations.add_ssh_key, self.app.settings, path)
+            read_key = read_local_key_pair if self.gpu_model is not None else read_public_key
+            key = await asyncio.to_thread(read_key, path)
+            message = await asyncio.to_thread(
+                operations.add_ssh_key, self.app.settings, key, provider_name=self.provider_name
+            )
+            if self.gpu_model is not None:
+                self.app.settings = await asyncio.to_thread(
+                    remember_key, self.app.settings, self.app.config_path, self.provider_name, path
+                )
         except (GallocError, OSError) as exception:
             self._show_failure(str(exception))
             return

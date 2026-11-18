@@ -1,258 +1,277 @@
 import asyncio
-from datetime import timedelta
-from decimal import Decimal
 
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.markup import escape
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Input, OptionList, Static
 
 from galloc.core.exceptions import InvalidBudget, InvalidTTL
-from galloc.core.pricing import calculate_budget_ttl, calculate_cost, parse_budget
-from galloc.core.ttl import format_ttl, parse_ttl
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected
+from galloc.providers.factory import PROVIDER_NAME_LIST, is_configured
 from galloc.providers.schemas import GPUModel, Region
 from galloc.tui import operations
+from galloc.tui.add_catalog import GPUCatalog
+from galloc.tui.add_details import READY, GPUOption, format_region_list
+from galloc.tui.add_status import CatalogStatus
+from galloc.tui.add_steps import (
+    KEYS_MAP,
+    LIMIT_LABEL_MAP,
+    LIMIT_PLACEHOLDER_MAP,
+    AddStep,
+    format_limit_preview,
+    format_progress,
+    parse_limit,
+)
 from galloc.tui.message import Message
-from galloc.tui.theme import CURRENT, DONE
+from galloc.tui.ssh_key.access import find_registered_key, remember_key
+from galloc.tui.ssh_key.add import SSHKeyAddScreen
 
 
-CHOICE_KEYS = "[$foreground]↑↓[/] move   [$foreground]enter[/] select   [$foreground]esc[/] cancel"
-GPU_KEYS = f"{CHOICE_KEYS}   [$foreground]r[/] refresh"
-LIMIT_KEYS = "[$foreground]enter[/] create   [$foreground]esc[/] cancel"
-LIMIT_LABEL_MAP = {"ttl": "TTL", "budget": "Budget (USD)"}
-LIMIT_PLACEHOLDER_MAP = {"ttl": "30m, 1h, 1d", "budget": "2.5"}
-LOW_PRICE_THRESHOLD = 0.40
-PRICE_COLUMN_WIDTH = 9
-MEMORY_COLUMN_WIDTH = 9
-REGION_COLUMN_WIDTH = 14
+class AddScreen(Screen[tuple[str, str, str, str | None, str | None] | CreationRejected | None]):
+    """Collect a provider's GPU model, SSH access to it, a region, and either a TTL or compute budget."""
 
-
-class AddScreen(Screen[tuple[str, str, str | None, str | None] | CreationRejected | None]):
-    """Collect a GPU model, a region, and either a TTL or compute budget."""
-
-    BINDINGS = [Binding("escape", "cancel", "Cancel"), Binding("r", "refresh", "Refresh")]
+    BINDINGS = [Binding("escape", "back", "Back"), Binding("r", "refresh", "Refresh")]
 
     def __init__(self, error: str = "") -> None:
         """Start at GPU selection with nothing chosen."""
 
         super().__init__()
         self.error = error
-        self.step = "gpu"
-        self.gpu_model_list: list[GPUModel] = []
+        self.step: AddStep = AddStep.GPU
+        self.error_list: list[str] = []
         self.region_list: list[Region] = []
+        self.selected_provider: str | None = None
         self.selected_gpu_model: GPUModel | None = None
         self.selected_region: Region | None = None
 
     def compose(self) -> ComposeResult:
-        """Stack the finished steps above the one widget that takes the current answer."""
+        """Stack the finished steps above the current step's widgets, beside statuses and messages."""
 
         yield Static("[b $primary]galloc[/] [$muted]· add[/]", id="header")
-        yield Static(f"{CURRENT} GPU", id="progress")
-        yield Static(id="columns")
-        yield OptionList(id="choice", compact=True)
-        yield Input(id="limit", compact=True)
-        yield Static("Loading…", id="note")
-        yield Message()
-        yield Static(GPU_KEYS, id="keys")
+        with Horizontal():
+            with Vertical():
+                yield Static(id="progress")
+                yield GPUCatalog()
+                yield Static(id="step-columns")
+                yield OptionList(id="step-choice", compact=True)
+                yield Input(id="limit", compact=True)
+                yield Static(id="preview")
+            with Vertical(id="detail"):
+                yield CatalogStatus()
+                yield Message()
+        yield Static(id="keys")
 
     def on_mount(self) -> None:
-        """Read the catalog before anything can be chosen."""
+        """Open GPU selection and ask for the catalogs."""
 
-        self.query_one(Input).display = False
-        self.query_one("#columns", Static).display = False
+        self._show_gpu_step()
+        self.action_refresh()
         if self.error:
             self.query_one(Message).show(self.error, error=True)
-        self.action_refresh()
 
     def action_refresh(self) -> None:
-        """Replace the GPU catalog with a fresh provider response."""
+        """Ask every provider that has an API key for a fresh catalog, all at the same time; retry an SSH check."""
 
-        choice = self.query_one(OptionList)
-        if self.step != "gpu" or choice.disabled:
+        if self.step == AddStep.SSH_KEY:
+            self.check_ssh_key()
+            return
+        if self.step != AddStep.GPU or self.query_one(CatalogStatus).loading:
             return
 
-        choice.disabled = True
-        choice.clear_options()
-        self.query_one("#note", Static).update("Loading…")
-        self.load_gpu_model_list()
+        provider_name_list = [name for name in PROVIDER_NAME_LIST if is_configured(self.app.settings, name)]
+        self.error_list = []
+        self.query_one(CatalogStatus).start(provider_name_list)
+        self.query_one(GPUCatalog).clear()
+        if not provider_name_list:
+            self.query_one(Message).show("No provider has an API key. Press p in the GPU list to add one.", error=True)
+        for provider_name in provider_name_list:
+            self.load_gpu_model_list(provider_name)
 
     @work
-    async def load_gpu_model_list(self) -> None:
-        """Read the catalog off the input loop; a failed or empty read waits for a manual refresh."""
+    async def load_gpu_model_list(self, provider_name: str) -> None:
+        """Read one provider's catalog off the input loop and show it as soon as it arrives."""
 
         try:
-            gpu_model_list = await asyncio.to_thread(operations.load_gpu_model_list, self.app.settings)
+            gpu_model_list = await asyncio.to_thread(operations.load_gpu_model_list, self.app.settings, provider_name)
         except (GallocError, OSError) as exception:
-            self._show_failure(str(exception))
+            self.query_one(CatalogStatus).set_status(provider_name, "failed")
+            self.error_list.append(f"{provider_name}: {exception}")
+            self.query_one(Message).show("\n".join(self.error_list), error=True)
             return
 
-        self._show_gpu_step(gpu_model_list)
+        self.query_one(CatalogStatus).set_status(provider_name, READY if gpu_model_list else "no GPUs")
+        self.query_one(GPUCatalog).add_gpu_model_list(provider_name, gpu_model_list)
 
-    def _show_gpu_step(self, gpu_model_list: list[GPUModel]) -> None:
-        """Offer the available GPU models with their hourly price, memory, and stock."""
+    @work(exclusive=True, group="ssh-key")
+    async def check_ssh_key(self) -> None:
+        """Require access at the selected provider before asking for a region or a billable duration."""
 
-        self.gpu_model_list = gpu_model_list
-        self.query_one("#note", Static).update("")
-        name_width = max(len("GPU"), max(len(gpu_model.name) for gpu_model in gpu_model_list))
-        columns = self.query_one("#columns", Static)
-        columns.update(
-            f"{'GPU':<{name_width}}     {'USD/HOUR':<{PRICE_COLUMN_WIDTH}}  {'VRAM (GB)':<{MEMORY_COLUMN_WIDTH}}  STOCK"
-        )
-        columns.display = True
+        self.query_one(CatalogStatus).show_activity("checking SSH key")
+        try:
+            path = await asyncio.to_thread(find_registered_key, self.app.settings, self.selected_provider)
+            if path is not None:
+                self.app.settings = await asyncio.to_thread(
+                    remember_key, self.app.settings, self.app.config_path, self.selected_provider, path
+                )
+        except (GallocError, OSError) as exception:
+            self.query_one(CatalogStatus).show_activity(None)
+            self.query_one(Message).show(str(exception), error=True)
+            return
 
-        choice = self.query_one(OptionList)
-        choice.add_options([_format_gpu_model(gpu_model, name_width) for gpu_model in gpu_model_list])
-        choice.highlighted = 0
-        choice.disabled = False
-        choice.focus()
+        if path is None:
+            self.app.push_screen(
+                SSHKeyAddScreen(self.selected_provider, gpu_model=self.selected_gpu_model), self._ssh_key_added
+            )
+            return
+        self._start_region_step()
 
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        """Take the GPU model first; the same list then takes the region and the kind of limit."""
+    def _ssh_key_added(self, message: str | None) -> None:
+        """Continue after registration, or return to GPU selection when key setup is cancelled."""
 
-        if self.step == "gpu":
-            self.selected_gpu_model = self.gpu_model_list[event.option_index]
-            event.option_list.disabled = True
-            self.load_region_list()
-        elif self.step == "region":
-            self._show_limit_step(self.region_list[event.option_index])
-        else:
-            self._show_limit_input(list(LIMIT_LABEL_MAP)[event.option_index])
+        if message is None:
+            self._show_gpu_step((self.selected_provider, self.selected_gpu_model))
+            return
+        self._start_region_step()
 
-    @work
+    def _start_region_step(self) -> None:
+        """Load regions only after a matching local SSH identity is registered."""
+
+        self._show_step(AddStep.REGION)
+        self.load_region_list()
+
+    @work(group="region")
     async def load_region_list(self) -> None:
         """Read the chosen model's regions; sold-out stock restarts selection with a fresh catalog."""
 
+        self.query_one(CatalogStatus).show_activity("loading regions")
         try:
-            region_list = await asyncio.to_thread(
-                operations.load_region_list, self.app.settings, self.selected_gpu_model.id
+            self.region_list = await asyncio.to_thread(
+                operations.load_region_list, self.app.settings, self.selected_provider, self.selected_gpu_model.id
             )
         except CreationRejected as exception:
             self.dismiss(exception)
             return
         except (GallocError, OSError) as exception:
-            self._show_failure(str(exception))
+            self._show_gpu_step((self.selected_provider, self.selected_gpu_model))
+            self.query_one(Message).show(str(exception), error=True)
             return
 
-        self._show_region_step(region_list)
+        self._show_region_step()
 
-    def _show_region_step(self, region_list: list[Region]) -> None:
-        """Offer the regions that have the chosen GPU model in stock."""
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        """Accept the offer, region, or limit chosen on the current step."""
 
-        self.step = "region"
-        self.region_list = region_list
-        self.query_one("#progress", Static).update(f"{self._describe_gpu_model()}\n{CURRENT} Region")
-        self.query_one("#keys", Static).update(CHOICE_KEYS)
-        self.query_one("#columns", Static).update(f"{'ID':<{REGION_COLUMN_WIDTH}}  LOCATION")
+        if self.step == AddStep.GPU and isinstance(event.option, GPUOption):
+            self.selected_provider = event.option.provider_name
+            self.selected_gpu_model = event.option.gpu_model
+            self._show_step(AddStep.SSH_KEY)
+            self.check_ssh_key()
 
-        choice = self.query_one(OptionList)
-        choice.clear_options()
-        choice.add_options([escape(f"{region.id:<{REGION_COLUMN_WIDTH}}  {region.location}") for region in region_list])
-        choice.highlighted = 0
-        choice.disabled = False
-        choice.focus()
+        elif self.step == AddStep.REGION and event.option_list.id == "step-choice":
+            self.selected_region = self.region_list[event.option_index]
+            self._show_limit_step()
 
-    def _show_limit_step(self, region: Region) -> None:
-        """Offer an explicit choice between duration and compute budget."""
-
-        self.step = "limit"
-        self.selected_region = region
-        self.query_one("#progress", Static).update(
-            f"{self._describe_gpu_model()}\n{DONE} Region   {escape(region.id)}\n{CURRENT} TTL or budget"
-        )
-        self.query_one("#columns", Static).display = False
-        choice = self.query_one(OptionList)
-        choice.styles.margin = (1, 0)
-        choice.clear_options()
-        choice.add_options(list(LIMIT_LABEL_MAP.values()))
-        choice.highlighted = 0
-
-    def _show_limit_input(self, mode: str) -> None:
-        """Ask for the selected limit with its input format."""
-
-        self.step = mode
-        self.query_one("#progress", Static).update(
-            f"{self._describe_gpu_model()}\n{DONE} Region   {escape(self.selected_region.id)}\n"
-            f"{CURRENT} {LIMIT_LABEL_MAP[mode]}"
-        )
-        self.query_one("#keys", Static).update(LIMIT_KEYS)
-        self.query_one(OptionList).display = False
-
-        limit_input = self.query_one(Input)
-        limit_input.placeholder = LIMIT_PLACEHOLDER_MAP[mode]
-        limit_input.display = True
-        limit_input.focus()
-
-    def _describe_gpu_model(self) -> str:
-        """Show the chosen GPU model as a finished step with its hourly price."""
-
-        return (
-            f"{DONE} GPU      {escape(self.selected_gpu_model.name)}  ${self.selected_gpu_model.hourly_price:.2f}/hour"
-        )
+        elif self.step == AddStep.LIMIT and event.option_list.id == "step-choice":
+            self._show_limit_input(list(LIMIT_LABEL_MAP)[event.option_index])
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        """Preview cost for a TTL or duration for a fractional compute budget."""
+        """Preview the cost of the entered TTL or the duration the entered budget buys."""
 
-        note = self.query_one("#note", Static)
-        try:
-            duration = self._duration(event.value.strip())
-        except InvalidTTL, InvalidBudget:
-            note.update("")
-            return
-
-        if self.step == "budget":
-            note.update(f"Estimated TTL: {format_ttl(duration)} · not a spending cap")
-        else:
-            cost = calculate_cost(duration, Decimal(str(self.selected_gpu_model.hourly_price)))
-            note.update(f"about ${cost:.2f} · compute only")
+        preview = format_limit_preview(self.step, event.value.strip(), self.selected_gpu_model.hourly_price)
+        self.query_one("#preview", Static).update(preview)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Hand one validated limit to the startup screen for final provider validation."""
+        """Hand a validated limit to startup for final provider validation."""
 
         value = event.value.strip()
         try:
-            self._duration(value)
+            parse_limit(self.step, value, self.selected_gpu_model.hourly_price)
         except (InvalidTTL, InvalidBudget) as exception:
             self.query_one(Message).show(str(exception), error=True)
             return
 
-        ttl = value if self.step == "ttl" else None
-        budget = value if self.step == "budget" else None
-        self.dismiss((self.selected_gpu_model.id, self.selected_region.id, ttl, budget))
+        ttl = value if self.step == AddStep.TTL else None
+        budget = value if self.step == AddStep.BUDGET else None
+        self.dismiss((self.selected_provider, self.selected_gpu_model.id, self.selected_region.id, ttl, budget))
 
-    def _duration(self, value: str) -> timedelta:
-        """Validate the entered limit using the shared CLI pricing and TTL rules."""
+    def action_back(self) -> None:
+        """Return to the previous step with the cursor on its answer; the first step closes search, then the screen."""
 
-        if self.step == "ttl":
-            return parse_ttl(value)
-        price = Decimal(str(self.selected_gpu_model.hourly_price))
-        return parse_ttl(calculate_budget_ttl(parse_budget(value), price))
+        catalog = self.query_one(GPUCatalog)
+        if self.step == AddStep.GPU and catalog.searching:
+            catalog.close_search()
 
-    def action_cancel(self) -> None:
-        """Return to the GPU list without creating anything."""
+        elif self.step == AddStep.GPU:
+            self.dismiss(None)
 
-        self.dismiss(None)
+        elif self.step in {AddStep.SSH_KEY, AddStep.REGION}:
+            self.workers.cancel_group(self, "ssh-key")
+            self.workers.cancel_group(self, "region")
+            self._show_gpu_step((self.selected_provider, self.selected_gpu_model))
 
-    def _show_failure(self, message: str) -> None:
-        """Report the failure and let the GPU model be chosen again."""
+        elif self.step == AddStep.LIMIT:
+            self._show_region_step(self.region_list.index(self.selected_region))
 
-        self.query_one(Message).show(message, error=True)
-        self.query_one("#note", Static).update("")
+        else:
+            self._show_limit_step(list(LIMIT_LABEL_MAP).index(self.step))
 
-        choice = self.query_one(OptionList)
-        choice.disabled = False
+    def _show_gpu_step(self, highlighted: tuple[str, GPUModel] | None = None) -> None:
+        """Open GPU selection with the given model under the cursor."""
+
+        self._show_step(AddStep.GPU)
+        self.query_one(GPUCatalog).show(highlighted)
+
+    def _show_region_step(self, highlighted: int = 0) -> None:
+        """Offer the regions that have the chosen GPU model in stock."""
+
+        columns, row_list = format_region_list(self.region_list)
+        self._show_choice(AddStep.REGION, row_list, highlighted, columns)
+
+    def _show_limit_step(self, highlighted: int = 0) -> None:
+        """Offer an explicit choice between duration and compute budget."""
+
+        self._show_choice(AddStep.LIMIT, list(LIMIT_LABEL_MAP.values()), highlighted)
+
+    def _show_choice(self, step: AddStep, row_list: list[str], highlighted: int, columns: str = "") -> None:
+        """Open a step answered from the step list, under its column header when it has one."""
+
+        self._show_step(step)
+        header = self.query_one("#step-columns", Static)
+        header.update(columns)
+        header.display = bool(columns)
+
+        choice = self.query_one("#step-choice", OptionList)
+        choice.clear_options()
+        choice.add_options(row_list)
+        choice.highlighted = highlighted
+        choice.display = True
         choice.focus()
 
+    def _show_limit_input(self, step: AddStep) -> None:
+        """Open the step that takes the chosen kind of limit as text, with its input format."""
 
-def _format_gpu_model(gpu_model: GPUModel, name_width: int) -> str:
-    """Align catalog columns and mark GPUs priced below the low-price threshold."""
+        self._show_step(step)
+        limit_input = self.query_one("#limit", Input)
+        limit_input.clear()
+        limit_input.placeholder = LIMIT_PLACEHOLDER_MAP[step]
+        limit_input.display = True
+        limit_input.focus()
 
-    price = f"${gpu_model.hourly_price:.2f}"
-    marker = "ϟ" if gpu_model.hourly_price < LOW_PRICE_THRESHOLD else " "
-    return escape(
-        f"{gpu_model.name:<{name_width}}  {marker}  {price:<{PRICE_COLUMN_WIDTH}}  "
-        f"{gpu_model.memory_gb:<{MEMORY_COLUMN_WIDTH}}  {gpu_model.availability.title()}"
-    )
+    def _show_step(self, step: AddStep) -> None:
+        """Make a step current: list the answered steps above it, name its keys, and hide other steps' widgets."""
+
+        self.step = step
+        self.query_one(GPUCatalog).display = step == AddStep.GPU
+        for selector in ("#step-columns", "#step-choice", "#limit"):
+            self.query_one(selector).display = False
+
+        self.query_one("#preview", Static).update("")
+        self.query_one("#progress", Static).update(
+            format_progress(step, self.selected_provider, self.selected_gpu_model, self.selected_region)
+        )
+        self.query_one("#keys", Static).update(KEYS_MAP[step])
+        # A new step ends the wait for the previous one.
+        self.query_one(CatalogStatus).show_activity(None)

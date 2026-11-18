@@ -8,22 +8,23 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Static
 
+from galloc.core.exceptions import GPUCreationPending
 from galloc.core.schemas import GPU
 from galloc.exceptions import GallocError
-from galloc.providers.exceptions import CreationRejected
 from galloc.tui import operations
 from galloc.tui.message import Message
 
 
-class StartupScreen(Screen[str | CreationRejected | None]):
+class StartupScreen(Screen[str | GallocError | None]):
     """Create one GPU and show startup progress until ready or the user stops waiting."""
 
     BINDINGS = [Binding("escape", "cancel", "Back")]
 
-    def __init__(self, gpu_model: str, region: str, ttl: str | None, budget: str | None) -> None:
+    def __init__(self, provider_name: str, gpu_model: str, region: str, ttl: str | None, budget: str | None) -> None:
         """Keep the selected inputs in memory until creation finishes."""
 
         super().__init__()
+        self.provider_name = provider_name
         self.gpu_model = gpu_model
         self.provider_region = region
         self.ttl = ttl
@@ -52,23 +53,40 @@ class StartupScreen(Screen[str | CreationRejected | None]):
         progress.update(Spinner("arc", "Creating…"))
         try:
             gpu, instance = await asyncio.to_thread(
-                operations.create, self.app.settings, self.gpu_model, self.provider_region, self.ttl, self.budget
+                operations.create,
+                self.app.settings,
+                self.provider_name,
+                self.gpu_model,
+                self.provider_region,
+                self.ttl,
+                self.budget,
             )
-            self.created_gpu = gpu
-            progress.update(Spinner("arc", f"{gpu.name}  Preparing…"))
-            await operations.wait_for_gpu(self.app.settings, gpu, instance)
-        except CreationRejected as exception:
+        except (GPUCreationPending, sqlite3.Error, OSError) as exception:
+            # The request may have produced a GPU, so the failure stays on screen.
+            self._show_failure(str(exception))
+            return
+        except GallocError as exception:
+            # Nothing was created: the GPU is chosen again with the reason shown.
             self.dismiss(exception)
             return
+
+        self.created_gpu = gpu
+        progress.update(Spinner("arc", f"{gpu.name}  Preparing…"))
+        try:
+            await operations.wait_for_gpu(self.app.settings, gpu, instance)
         except (GallocError, sqlite3.Error, OSError) as exception:
-            prefix = f"{self.created_gpu.name}: " if self.created_gpu is not None else ""
-            progress.update("")
-            self.query_one(Message).show(f"{prefix}{exception}", error=True)
+            self._show_failure(f"{gpu.name}: {exception}")
             return
-        finally:
-            progress.auto_refresh = None
 
         self.dismiss(f"{gpu.name} ready")
+
+    def _show_failure(self, message: str) -> None:
+        """Stop the spinner and keep the failure on screen until the user leaves."""
+
+        progress = self.query_one("#startup", Static)
+        progress.auto_refresh = None
+        progress.update("")
+        self.query_one(Message).show(message, error=True)
 
     def action_cancel(self) -> None:
         """Return to the list, keeping any submitted GPU and its deadline intact."""

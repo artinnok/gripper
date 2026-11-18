@@ -11,6 +11,7 @@ from textual.pilot import Pilot
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.core import storage
 from galloc.core.schemas import GPU
+from galloc.core.ssh_keys import generate_key_pair, read_public_key
 from galloc.settings import Settings
 from galloc.tui.app import GallocApp
 
@@ -68,6 +69,14 @@ def runpod_http(monkeypatch):
 
     monkeypatch.setattr("galloc.providers.factory.RunpodAPIClient", make_client)
     return handler
+
+
+@pytest.fixture
+def local_key(home):
+    """Create a real local SSH identity for GPU-add tests with provider access already configured."""
+
+    path = generate_key_pair(home / ".ssh" / "id_ed25519")
+    return read_public_key(path)
 
 
 @pytest.fixture

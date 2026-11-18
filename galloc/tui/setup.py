@@ -16,13 +16,8 @@ from galloc.providers.factory import PROVIDER_NAME_LIST
 from galloc.settings import Settings
 from galloc.tui import operations
 from galloc.tui.message import Message
+from galloc.tui.provider.details import API_KEY_NOTE_MAP
 from galloc.tui.theme import CURRENT, DONE
-
-
-API_KEY_NOTE_MAP = {
-    "runpod": "Pods read/write · Catalog read · Authentication read/write\nconsole.runpod.io/user/credentials",
-    "vast": "instance_read · instance_write · user_read · user_write · misc\ncloud.vast.ai/manage-keys/",
-}
 
 
 class SetupStep(StrEnum):
@@ -209,7 +204,7 @@ class SetupScreen(Screen[Settings]):
             self._show_failure(str(exception))
             return
 
-        self.dismiss(self.confirmed_settings.model_copy(update={"ssh_public_key": public_key_path}))
+        self.dismiss(self.confirmed_settings)
 
     def _show_failure(self, message: str) -> None:
         """Report the failure, unlock the screen, and let the current step be answered again."""
