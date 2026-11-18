@@ -4,12 +4,11 @@ import click
 
 from galloc.core import services
 from galloc.core.schemas import GPU, Creation
-from galloc.core.ssh_keys import read_public_key
 from galloc.core.storage import open_database
 from galloc.core.validators import prepare_creation
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected
-from galloc.providers.factory import PROVIDER_NAME_LIST, get_ssh_public_key_path, open_provider
+from galloc.providers.factory import PROVIDER_NAME_LIST, open_provider
 from galloc.providers.schemas import Instance
 from galloc.settings import Settings
 from galloc.terminal.output import print_created_gpu, print_creation_estimate
@@ -42,17 +41,11 @@ def add_command(
 
     _validate_limit(ttl, budget)
     provider_name = provider_name or settings.provider
-    public_key_path = get_ssh_public_key_path(settings, provider_name)
-    ssh_key = read_public_key(public_key_path) if public_key_path is not None else None
-
     with open_database(settings.database_path) as connection, open_provider(settings, provider_name) as provider:
         creation = prepare_creation(
             connection, provider, provider_name=provider_name, gpu=gpu, region=region, ttl=ttl, budget=budget
         )
         print_creation_estimate(creation, budget)
-        if ssh_key is not None:
-            provider.create_ssh_key(ssh_key)
-
         created_gpu, instance = _create_gpu(connection, provider, creation)
         instance = wait_for_gpu(provider, created_gpu, instance, settings)
 
