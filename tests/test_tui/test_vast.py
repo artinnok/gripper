@@ -114,7 +114,7 @@ def test_vast_add_and_deadline_on_another_screen(
         await pilot.press("a")
         await settle(pilot)
         row = pilot.app.screen.query_one(OptionList).get_option_at_index(0).prompt
-        assert "RTX 4090 #1234" in row and "ϟ" in row and "Available" in row
+        assert "RTX 4090" in row and "#" not in row and "ϟ" in row and "Available" in row
         await pilot.press("enter")
         await settle(pilot)
         await pilot.press("enter")

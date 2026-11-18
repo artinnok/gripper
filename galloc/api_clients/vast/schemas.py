@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, PositiveInt, RootModel
+from pydantic import AliasChoices, BaseModel, Field, PositiveInt, RootModel
 
 
 class Offer(BaseModel):
@@ -58,7 +58,8 @@ class SSHKey(BaseModel):
     """Read a registered key and its provider ID for individual removal."""
 
     id: PositiveInt
-    key: str
+    # Vast.ai's reference names this field "key" in the key list and "public_key" in a created key.
+    key: str = Field(validation_alias=AliasChoices("key", "public_key"))
 
 
 class SSHKeyList(RootModel[list[SSHKey]]):

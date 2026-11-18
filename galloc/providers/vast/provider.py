@@ -118,21 +118,23 @@ class VastProvider(Provider):
         return sorted(region_map.values(), key=lambda region: region.id)
 
     def get_gpu_list(self, region: str | None = None) -> list[GPUModel]:
-        """List up to 100 cheapest matching offers, displayed in descending compute-price order."""
+        """List the cheapest offer of each GPU model and memory size."""
 
-        gpu_list = [
-            GPUModel(
+        gpu_map = {}
+        for offer in sorted(self._search_model_offer_list(region), key=lambda offer: offer.dph_base):
+            gpu = GPUModel(
                 id=str(offer.id),
-                name=f"{offer.gpu_name} #{offer.id}",
+                name=offer.gpu_name,
                 hourly_price=offer.dph_base,
                 availability="AVAILABLE",
-                memory_gb=offer.gpu_ram // 1024,
+                # Vast.ai reports slightly less than the nominal size, such as 24564 MB for a 24 GB card.
+                memory_gb=round(offer.gpu_ram / 1024),
                 min_ram_gb=offer.cpu_ram // 1024 if offer.cpu_ram is not None else None,
                 min_vcpu_count=int(offer.cpu_cores_effective) if offer.cpu_cores_effective is not None else None,
             )
-            for offer in self._search_offer_list(region=region)
-        ]
-        return sorted(gpu_list, key=lambda gpu: gpu.hourly_price, reverse=True)
+            gpu_map.setdefault((gpu.name, gpu.memory_gb), gpu)
+
+        return sorted(gpu_map.values(), key=lambda gpu: gpu.hourly_price, reverse=True)
 
     def get_ssh_key_list(self) -> list[SSHKey]:
         """Read account registrations as the same fingerprints used by the CLI and TUI."""
@@ -157,17 +159,41 @@ class VastProvider(Provider):
         return False
 
     def _resolve_offer(self, gpu: str) -> Offer:
-        """Resolve an offer ID, including IDs displayed beside GPU names in the TUI."""
+        """Resolve one offer by its numeric ID; a GPU name alone matches many hosts."""
 
         offer_id = gpu.rsplit("#", 1)[-1].strip()
         if not offer_id.isdecimal():
             raise InvalidGPU("Choose a Vast.ai offer by its numeric ID. Run 'galloc' for interactive selection.")
-        offer_list = self._search_offer_list(offer_id=int(offer_id))
-        if not offer_list:
-            raise GPUUnavailable(f"Vast.ai offer {offer_id} is no longer available. Choose another GPU.")
-        return offer_list[0]
+        selected_id = int(offer_id)
+        for offer in self._search_offer_list(offer_id=selected_id):
+            if offer.id == selected_id:
+                return offer
+        raise GPUUnavailable(f"Vast.ai offer {offer_id} is no longer available. Choose another GPU.")
 
-    def _search_offer_list(self, *, region: str | None = None, offer_id: int | None = None) -> list[Offer]:
+    def _search_model_offer_list(self, region: str | None) -> list[Offer]:
+        """Repeat the search without the GPU names already found, until it brings no new model.
+
+        One search returns only its cheapest offers, which are many hosts of a few inexpensive models.
+        """
+
+        offer_list = []
+        name_set = set()
+        while True:
+            page_offer_list = self._search_offer_list(region=region, excluded_name_list=sorted(name_set))
+            new_name_set = {offer.gpu_name for offer in page_offer_list} - name_set
+            if not new_name_set:
+                return offer_list
+
+            offer_list += page_offer_list
+            name_set |= new_name_set
+
+    def _search_offer_list(
+        self,
+        *,
+        region: str | None = None,
+        offer_id: int | None = None,
+        excluded_name_list: list[str] | None = None,
+    ) -> list[Offer]:
         """Search rentable single-GPU offers with enough local disk for the configured image."""
 
         query = {
@@ -185,7 +211,10 @@ class VastProvider(Provider):
         if region is not None:
             query["geolocation"] = {"eq": region.strip().upper()}
         if offer_id is not None:
-            query["id"] = {"eq": offer_id}
+            # The search matches the offer ID it returns only through this field; filtering by "id" finds nothing.
+            query["ask_contract_id"] = {"eq": offer_id}
+        if excluded_name_list:
+            query["gpu_name"] = {"notin": excluded_name_list}
         return self._api_client.search_offer_list(query)
 
 

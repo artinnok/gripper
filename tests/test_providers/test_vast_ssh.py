@@ -52,3 +52,17 @@ def test_key_read_failure_does_not_register_over_it(make_vast_client, status):
     provider = VastProvider(make_vast_client(handler), image="example/image", disk_gb=50)
     with pytest.raises(APIRequestFailed):
         provider.create_ssh_key(parse_public_key(SSH_PUBLIC_KEY))
+
+
+@pytest.mark.parametrize("field", ["key", "public_key"])
+def test_key_list_reads_either_documented_field(make_vast_client, field):
+    """Read the key text under the name used by the key list and the one used by a created key."""
+
+    def handler(request):
+        """Return one registered key under the requested field name."""
+
+        return httpx.Response(200, json=[{"id": 11, "user_id": 7, field: SSH_PUBLIC_KEY, "deleted_at": None}])
+
+    provider = VastProvider(make_vast_client(handler), image="example/image", disk_gb=50)
+    (ssh_key,) = provider.get_ssh_key_list()
+    assert ssh_key.fingerprint == SSH_FINGERPRINT

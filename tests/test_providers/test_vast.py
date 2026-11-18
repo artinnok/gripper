@@ -10,15 +10,27 @@ from galloc.providers.schemas import InstanceStatus
 from galloc.providers.vast.provider import VastProvider
 
 
-def test_catalog_filters_disk_and_keeps_offer_identity(make_vast_client, vast_offer_data):
-    """Expose distinct offers with truthful availability, compute prices, and hardware units."""
+def test_catalog_pages_through_every_model_and_keeps_its_cheapest_offer(make_vast_client, vast_offer_data):
+    """Search again without the names already found and show one offer per GPU model and memory size."""
+
+    page_map = {
+        (): [
+            vast_offer_data | {"id": 2345, "dph_base": 0.8},
+            vast_offer_data,
+            vast_offer_data | {"id": 3456, "dph_base": 0.5, "gpu_ram": 49140},
+            vast_offer_data | {"id": 4567, "dph_base": 0.9, "gpu_name": "RTX 5090", "gpu_ram": 32607},
+        ],
+        ("RTX 4090", "RTX 5090"): [vast_offer_data | {"id": 5678, "dph_base": 2.1, "gpu_name": "H100 SXM"}],
+        ("H100 SXM", "RTX 4090", "RTX 5090"): [],
+    }
 
     def handler(request):
-        """Require a bounded on-demand search with the actual configured disk size."""
+        """Require a bounded on-demand search with the configured disk size and serve the page it asks for."""
 
         assert request.method == "POST"
         assert request.url.path == "/api/v0/bundles/"
         query = json.loads(request.content)
+        excluded_name_list = query.pop("gpu_name", {"notin": []})["notin"]
         assert query == {
             "type": "ondemand",
             "limit": 100,
@@ -32,12 +44,14 @@ def test_catalog_filters_disk_and_keeps_offer_identity(make_vast_client, vast_of
             "allocated_storage": 64,
             "geolocation": {"eq": "US"},
         }
-        return httpx.Response(200, json={"offers": [vast_offer_data, vast_offer_data | {"id": 2345, "dph_base": 0.8}]})
+        return httpx.Response(200, json={"offers": page_map[tuple(excluded_name_list)]})
 
     provider = VastProvider(make_vast_client(handler), image="example/image", disk_gb=64)
-    expensive, cheap = provider.get_gpu_list(" us ")
-    assert (expensive.id, cheap.id) == ("2345", "1234")
-    assert cheap.name == "RTX 4090 #1234"
+    later_page, other_model, more_memory, cheap = provider.get_gpu_list(" us ")
+    assert (later_page.id, later_page.name) == ("5678", "H100 SXM")
+    assert (other_model.id, other_model.name, other_model.memory_gb) == ("4567", "RTX 5090", 32)
+    assert (more_memory.id, more_memory.name, more_memory.memory_gb) == ("3456", "RTX 4090", 48)
+    assert (cheap.id, cheap.name) == ("1234", "RTX 4090")
     assert (cheap.hourly_price, cheap.memory_gb, cheap.min_ram_gb, cheap.min_vcpu_count) == (0.3, 24, 64, 8)
     assert cheap.availability == "AVAILABLE"
 
@@ -46,14 +60,16 @@ def test_validation_and_region_lookup_pin_the_offer(make_vast_client, vast_offer
     """Resolve the selected offer afresh and reject a different region without substituting hosts."""
 
     def handler(request):
-        """Require an exact ID search even if other matching models exist elsewhere."""
+        """Require the filter the live search honors; a search by "id" finds no offer there."""
 
-        assert json.loads(request.content)["id"] == {"eq": 1234}
-        return httpx.Response(200, json={"offers": [vast_offer_data]})
+        query = json.loads(request.content)
+        assert query["ask_contract_id"] == {"eq": 1234}
+        assert "id" not in query
+        return httpx.Response(200, json={"offers": [vast_offer_data | {"id": 9876}, vast_offer_data]})
 
     provider = VastProvider(make_vast_client(handler), image="example/image", disk_gb=50)
-    assert provider.validate_create("RTX 4090 #1234", "us") == ("1234", "US", Decimal("0.3"))
-    (region,) = provider.get_region_list("1234")
+    assert provider.validate_create(" 1234 ", "us") == ("1234", "US", Decimal("0.3"))
+    (region,) = provider.get_region_list("RTX 4090 #1234")
     assert (region.id, region.location) == ("US", "Oregon, US")
     with pytest.raises(InvalidRegion):
         provider.validate_create("1234", "FR")
@@ -61,13 +77,14 @@ def test_validation_and_region_lookup_pin_the_offer(make_vast_client, vast_offer
         provider.validate_create("RTX 4090", "US")
 
 
-def test_sold_out_offer_requires_new_selection(make_vast_client):
+@pytest.mark.parametrize("returned_ids", [[], [9876]])
+def test_sold_out_offer_requires_new_selection(make_vast_client, vast_offer_data, returned_ids):
     """Do not reuse stale stock or choose another machine when an offer disappears."""
 
     def handler(request):
-        """Return a confirmed empty search for the selected ID."""
+        """Return a search result without the selected offer."""
 
-        return httpx.Response(200, json={"offers": []})
+        return httpx.Response(200, json={"offers": [vast_offer_data | {"id": offer_id} for offer_id in returned_ids]})
 
     provider = VastProvider(make_vast_client(handler), image="example/image", disk_gb=50)
     with pytest.raises(GPUUnavailable):
