@@ -49,4 +49,8 @@ def test_vast_only_configuration_and_cli_lifecycle(
     assert deleted
     assert runner.invoke(cli, ["ls"]).stdout == "No GPUs.\n"
     result = runner.invoke(cli, ["providers", "--output", "json"])
-    assert json.loads(result.stdout) == [{"name": "runpod", "configured": False}, {"name": "vast", "configured": True}]
+    assert json.loads(result.stdout) == [
+        {"name": "runpod", "configured": False},
+        {"name": "vast", "configured": True},
+        {"name": "lambda", "configured": False},
+    ]

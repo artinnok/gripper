@@ -64,7 +64,7 @@ def print_gpu(gpu: GPU, output: str, instance: Instance, public_key_path: Path |
         ("Expires at", gpu.expires_at.isoformat()),
         ("GPU", instance.gpu or "-"),
         ("Region", instance.region or "-"),
-        ("Created at", instance.created_at.isoformat()),
+        ("Created at", instance.created_at.isoformat() if instance.created_at else "-"),
         ("SSH", format_ssh_command(instance.ssh_command, public_key_path) or "-"),
     ]
     for label, value in field_list:

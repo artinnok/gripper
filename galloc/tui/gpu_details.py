@@ -13,6 +13,7 @@ LOW_TIME_LEFT = timedelta(minutes=10)
 STATUS_COLOR_MAP = {
     InstanceStatus.PROVISIONING: AMBER_THEME.warning,
     InstanceStatus.RUNNING: AMBER_THEME.success,
+    InstanceStatus.TERMINATING: AMBER_THEME.warning,
     InstanceStatus.STOPPED: MUTED_COLOR,
     InstanceStatus.ERROR: AMBER_THEME.error,
 }

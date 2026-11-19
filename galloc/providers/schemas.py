@@ -10,6 +10,7 @@ class ProviderName(StrEnum):
 
     RUNPOD = "runpod"
     VAST = "vast"
+    LAMBDA = "lambda"
 
 
 class InstanceStatus(StrEnum):
@@ -18,6 +19,7 @@ class InstanceStatus(StrEnum):
     PROVISIONING = "provisioning"
     RUNNING = "running"
     STOPPED = "stopped"
+    TERMINATING = "terminating"
     ERROR = "error"
     DELETED = "deleted"
 
@@ -31,7 +33,7 @@ class Instance(BaseModel):
     ssh_command: str | None
     gpu: str | None
     hourly_price: float
-    created_at: datetime
+    created_at: datetime | None
 
 
 class Region(BaseModel):
@@ -43,12 +45,12 @@ class Region(BaseModel):
 
 
 class GPUModel(BaseModel):
-    """Describe a supported GPU and its catalog price in USD per GPU per hour."""
+    """Describe a supported GPU and its catalog price in USD per instance per hour."""
 
     id: str
     name: str
     hourly_price: float
     availability: Literal["LOW", "MEDIUM", "HIGH", "AVAILABLE"]
-    memory_gb: int
+    memory_gb: int | None
     min_ram_gb: int | None
     min_vcpu_count: int | None

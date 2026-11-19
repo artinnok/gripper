@@ -1,10 +1,13 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from galloc.api_clients.lambda_.client import LambdaAPIClient
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.api_clients.vast.client import VastAPIClient
+from galloc.core.ssh_keys import configured_key_path
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import UnsupportedProvider
+from galloc.providers.lambda_.provider import LambdaProvider
 from galloc.providers.runpod.provider import RunpodProvider
 from galloc.providers.schemas import ProviderName
 from galloc.providers.vast.provider import VastProvider
@@ -17,6 +20,19 @@ PROVIDER_NAME_LIST = tuple(provider.value for provider in ProviderName)
 @contextmanager
 def open_provider(settings: Settings, name: str) -> Iterator[Provider]:
     """Build the selected adapter from settings and close its HTTP client after use."""
+
+    if name == ProviderName.LAMBDA:
+        with LambdaAPIClient(
+            settings.lambda_api_key, base_url=settings.lambda_api_url, timeout=settings.api_timeout
+        ) as client:
+            yield LambdaProvider(
+                client,
+                disk_gb=settings.lambda_disk_gb or settings.disk_gb,
+                public_key_path=configured_key_path(settings, name),
+                timeout=settings.api_timeout,
+                poll_interval=settings.startup_poll_interval,
+            )
+        return
 
     if name == ProviderName.VAST:
         with VastAPIClient(

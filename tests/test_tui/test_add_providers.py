@@ -1,4 +1,5 @@
 import asyncio
+import json
 import threading
 
 import httpx
@@ -69,6 +70,65 @@ def test_catalog_lists_every_provider_and_creates_at_the_chosen_one(
     with storage.open_database(settings.database_path) as connection:
         (gpu,) = storage.get_gpu_list(connection)
     assert (gpu.provider, gpu.provider_instance_id) == ("vast", "5678")
+
+
+def test_lambda_catalog_to_ready_gpu(settings, config_path, lambda_http, lambda_entry, local_key):
+    """Launch the selected multi-GPU type with the identity discovered on this machine."""
+
+    config_path.touch()
+    settings.runpod_api_key = None
+    settings.lambda_api_key = SecretStr("lambda-test")
+    machine = lambda_entry["instance_type"]
+    region = lambda_entry["regions_with_capacity_available"][0]
+
+    def serve_lambda(request):
+        """Accept one named key on launch, then report the SSH-ready instance."""
+
+        if request.url.path.endswith("/instance-types"):
+            data = {machine["name"]: lambda_entry}
+        elif request.url.path.endswith("/ssh-keys"):
+            data = [{"id": "key1", "name": "my-key", "public_key": local_key.public_key}]
+        elif request.url.path.endswith("/launch"):
+            payload = json.loads(request.content)
+            assert (payload["instance_type_name"], payload["region_name"], payload["ssh_key_names"]) == (
+                machine["name"],
+                region["name"],
+                ["my-key"],
+            )
+            data = {"instance_ids": ["machine1"]}
+        else:
+            assert request.url.path.endswith("/instances/machine1")
+            data = {
+                "id": "machine1",
+                "instance_type": machine,
+                "region": region,
+                "status": "active",
+                "ip": "192.0.2.2",
+                "first_healthy": "2026-11-19T04:00:00Z",
+            }
+        return httpx.Response(200, json={"data": data})
+
+    lambda_http.side_effect = serve_lambda
+
+    async def scenario(pilot):
+        """Choose Lambda from the catalog and confirm the model, region, and limit."""
+
+        await pilot.press("a")
+        await settle(pilot)
+        screen = pilot.app.screen
+        row = screen.query_one("#choice", OptionList).get_option_at_index(0).prompt
+        assert "8x H100" in row and "$35.92" in row and "lambda" in row
+        await pilot.press("enter")
+        await settle(pilot)
+        await pilot.press("enter", "enter")
+        screen.query_one("#limit", Input).value = "30m"
+        await pilot.press("enter")
+        await settle(pilot)
+        assert isinstance(pilot.app.screen, GPUListScreen)
+        assert pilot.app.screen.query_one(DataTable).row_count == 1
+        assert "ubuntu@192.0.2.2" in pilot.app.screen.query_one("#info", Static).content
+
+    run_app(GallocApp(settings, config_path), scenario)
 
 
 def test_failed_provider_keeps_the_other_providers_offers(

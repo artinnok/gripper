@@ -13,6 +13,7 @@ from textual.widgets import Input, OptionList, Static
 from galloc.core.ssh_keys import generate_key_pair
 from galloc.exceptions import GallocError
 from galloc.providers.factory import PROVIDER_NAME_LIST
+from galloc.providers.schemas import ProviderName
 from galloc.settings import Settings
 from galloc.tui import operations
 from galloc.tui.message import Message
@@ -124,8 +125,9 @@ class SetupScreen(Screen[Settings]):
     def _show_disk_step(self) -> None:
         """Offer the default disk size for editing."""
 
+        label = "Minimum disk (GiB)" if self.provider_name == ProviderName.LAMBDA else "Disk (GB)"
         self.query_one("#progress", Static).update(
-            f"{DONE} Provider   {self.provider_name}\n{DONE} API key    ••••\n{CURRENT} Disk (GB)"
+            f"{DONE} Provider   {self.provider_name}\n{DONE} API key    ••••\n{CURRENT} {label}"
         )
         self.query_one("#note", Static).update("")
         self._show_input(SetupStep.DISK, str(self.confirmed_settings.disk_gb))
@@ -197,7 +199,7 @@ class SetupScreen(Screen[Settings]):
                 public_key_path = await asyncio.to_thread(generate_key_pair, Path.home() / ".ssh" / "galloc_ed25519")
                 # A refused registration then retries this key instead of generating another one.
                 self._show_key_path_step(str(public_key_path))
-            await asyncio.to_thread(
+            self.confirmed_settings = await asyncio.to_thread(
                 operations.finish_setup, self.confirmed_settings, self.app.config_path, self.api_key, public_key_path
             )
         except (GallocError, OSError) as exception:

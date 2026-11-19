@@ -38,6 +38,14 @@ class Settings(BaseModel):
     vast_disk_gb: PositiveInt | None = None
     vast_ssh_public_key: Path | None = None
 
+    ##########
+    # LAMBDA #
+    ##########
+    lambda_api_url: str = "https://cloud.lambda.com/api/v1/"
+    lambda_api_key: SecretStr | None = None
+    lambda_disk_gb: PositiveInt | None = None
+    lambda_ssh_public_key: Path | None = None
+
 
 def load_settings(config_path: Path) -> Settings:
     """Read and validate the TOML configuration shared by CLI and TUI."""

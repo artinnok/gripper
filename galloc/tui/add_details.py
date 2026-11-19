@@ -24,9 +24,10 @@ class GPUOption(Option):
 
         price = f"${gpu_model.hourly_price:.2f}"
         marker = "ϟ" if gpu_model.hourly_price < LOW_PRICE_THRESHOLD else " "
+        memory = str(gpu_model.memory_gb) if gpu_model.memory_gb is not None else "-"
         prompt = (
             f"{gpu_model.name:<{name_width}}  {marker}  {price:<{PRICE_COLUMN_WIDTH}}  "
-            f"{gpu_model.memory_gb:<{MEMORY_COLUMN_WIDTH}}  "
+            f"{memory:<{MEMORY_COLUMN_WIDTH}}  "
             f"{gpu_model.availability.title():<{STOCK_COLUMN_WIDTH}}  {provider_name}"
         )
         super().__init__(escape(prompt))

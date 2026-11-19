@@ -15,8 +15,9 @@ from galloc.core.validators import prepare_creation, prepare_extension, prepare_
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable
 from galloc.providers.factory import PROVIDER_NAME_LIST, is_configured, open_provider
-from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
+from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, ProviderName, Region
 from galloc.settings import Settings
+from galloc.tui.ssh_key.access import remember_key
 
 
 def load_gpu_list(settings: Settings) -> list[tuple[GPU, Instance]]:
@@ -151,11 +152,14 @@ def check_api_key(settings: Settings) -> None:
         provider.check_credentials()
 
 
-def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path) -> None:
-    """Register the selected public key, then save the configuration, which does not record the key."""
+def finish_setup(settings: Settings, config_path: Path, api_key: str, public_key_path: Path) -> Settings:
+    """Register the selected public key, save the configuration, and remember the key where launch names it."""
 
     add_ssh_key(settings, read_public_key(public_key_path))
     save_config(config_path, provider_name=settings.provider, api_key=api_key, disk_gb=settings.disk_gb)
+    if settings.provider != ProviderName.LAMBDA:
+        return settings
+    return remember_key(settings, config_path, settings.provider, public_key_path)
 
 
 def save_api_key(settings: Settings, config_path: Path, provider_name: str, api_key: str) -> Settings:

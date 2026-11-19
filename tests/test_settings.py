@@ -45,6 +45,7 @@ def test_legacy_sources_do_not_configure_application(tmp_path, monkeypatch, conf
     assert json.loads(result.stdout) == [
         {"name": "runpod", "configured": configured},
         {"name": "vast", "configured": False},
+        {"name": "lambda", "configured": False},
     ]
     assert "legacy-token" not in result.output
     assert "toml-token" not in result.output

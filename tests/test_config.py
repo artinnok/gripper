@@ -9,7 +9,7 @@ from galloc.exceptions import InvalidConfig
 from galloc.settings import load_settings
 
 
-@pytest.mark.parametrize("provider_name", ["runpod", "vast"])
+@pytest.mark.parametrize("provider_name", ["runpod", "vast", "lambda"])
 def test_saved_configuration_supplies_provider_settings(config_path, provider_name):
     """Read the saved provider and API key back through the shared settings model."""
 
@@ -22,7 +22,7 @@ def test_saved_configuration_supplies_provider_settings(config_path, provider_na
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
 
 
-@pytest.mark.parametrize("provider_name", ["runpod", "vast"])
+@pytest.mark.parametrize("provider_name", ["runpod", "vast", "lambda"])
 @pytest.mark.parametrize("provider_values, expected_disk", [("", 100), ("disk_gb = 80", 80)])
 def test_shared_defaults_and_provider_overrides(config_path, provider_values, expected_disk, provider_name):
     """Resolve the shared disk size and its provider override through the settings used by both interfaces."""

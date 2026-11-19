@@ -6,6 +6,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from galloc.api_clients.lambda_.client import LambdaAPIClient
 from galloc.api_clients.runpod.client import RunpodAPIClient
 from galloc.api_clients.vast.client import VastAPIClient
 
@@ -175,6 +176,37 @@ def make_vast_client():
             )
 
         yield make_client
+
+
+@pytest.fixture
+def lambda_http(monkeypatch):
+    """Exercise the Lambda client with an isolated HTTP transport."""
+
+    handler = Mock(side_effect=AssertionError("Unexpected Lambda request."))
+
+    def make_client(api_key, *, base_url, timeout):
+        """Keep the production URL, authentication, and response validation."""
+
+        return LambdaAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("galloc.providers.factory.LambdaAPIClient", make_client)
+    return handler
+
+
+@pytest.fixture
+def lambda_entry():
+    """Provide a multi-GPU machine type with one rentable region."""
+
+    return {
+        "instance_type": {
+            "name": "gpu_8x_h100",
+            "description": "8x H100 (80 GB SXM5)",
+            "gpu_description": "H100 (80 GB SXM5)",
+            "price_cents_per_hour": 3592,
+            "specs": {"gpus": 8, "vcpus": 208, "memory_gib": 1800, "storage_gib": 24780},
+        },
+        "regions_with_capacity_available": [{"name": "us-west-1", "description": "California, USA"}],
+    }
 
 
 @pytest.fixture
