@@ -11,7 +11,7 @@ from galloc.exceptions import GallocError
 from galloc.providers.factory import PROVIDER_NAME_LIST, is_configured
 from galloc.tui import operations
 from galloc.tui.message import Message
-from galloc.tui.provider.details import API_KEY_NOTE_MAP, format_provider, format_status
+from galloc.tui.provider.details import API_KEY_NOTE_MAP, ProviderKeyLink, format_provider, format_status
 
 
 LIST_KEYS = "[$foreground]a[/] api key   [$foreground]u[/] use as default   [$foreground]esc[/] GPUs"
@@ -22,6 +22,7 @@ class ProviderListScreen(Screen[None]):
     """List providers with their configuration status and take an API key in the detail column."""
 
     BINDINGS = [
+        Binding("f2", "open_provider", "Open API keys"),
         Binding("a", "api_key", "API key"),
         Binding("u", "use", "Use as default"),
         Binding("escape", "back", "Back"),
@@ -43,6 +44,7 @@ class ProviderListScreen(Screen[None]):
             yield DataTable(cursor_type="row")
             with Vertical(id="detail"):
                 yield Static(id="info")
+                yield ProviderKeyLink()
                 yield Input(id="prompt", password=True, compact=True)
                 yield Message()
         yield Static(LIST_KEYS, id="keys")
@@ -78,7 +80,14 @@ class ProviderListScreen(Screen[None]):
     def _show_detail(self) -> None:
         """Describe the selected provider."""
 
-        self.query_one("#info", Static).update(format_provider(self.app.settings, self._get_selected_provider()))
+        provider_name = self._get_selected_provider()
+        self.query_one("#info", Static).update(format_provider(self.app.settings, provider_name))
+        self.query_one(ProviderKeyLink).show_provider(provider_name)
+
+    def action_open_provider(self) -> None:
+        """Open the selected provider's API key page in the user's browser."""
+
+        self.query_one(ProviderKeyLink).action_open_link()
 
     def on_data_table_row_highlighted(self) -> None:
         """Follow the cursor with the detail column unless it is holding the API key prompt."""

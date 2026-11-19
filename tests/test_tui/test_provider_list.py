@@ -1,6 +1,6 @@
 import httpx
 from pydantic import SecretStr
-from textual.widgets import DataTable, Input, Static
+from textual.widgets import DataTable, Input, Link, Static
 
 from galloc.settings import load_settings
 from galloc.tui.app import GallocApp
@@ -32,7 +32,7 @@ def test_api_key_is_checked_saved_and_used_without_restart(settings, config_path
         await pilot.press("down", "a")
         prompt = screen.query_one(Input)
         assert prompt.has_focus and prompt.password
-        assert "cloud.vast.ai" in screen.query_one("#info", Static).content
+        assert screen.query_one(Link).url == "https://cloud.vast.ai/manage-keys/"
         prompt.value = "entered-vast-key"
         await pilot.press("tab", "up")
         assert table.cursor_row == 1

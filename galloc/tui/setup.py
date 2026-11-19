@@ -17,7 +17,7 @@ from galloc.providers.schemas import ProviderName
 from galloc.settings import Settings
 from galloc.tui import operations
 from galloc.tui.message import Message
-from galloc.tui.provider.details import API_KEY_NOTE_MAP
+from galloc.tui.provider.details import API_KEY_NOTE_MAP, ProviderKeyLink
 from galloc.tui.theme import CURRENT, DONE
 
 
@@ -34,7 +34,7 @@ class SetupStep(StrEnum):
 class SetupScreen(Screen[Settings]):
     """Collect provider credentials, disk size, and an SSH key before the first GPU list."""
 
-    BINDINGS = [Binding("escape", "back", "Back")]
+    BINDINGS = [Binding("escape", "back", "Back"), Binding("f2", "open_provider", "Open API keys")]
 
     def __init__(self) -> None:
         """Start at provider selection with nothing confirmed or saved."""
@@ -55,6 +55,7 @@ class SetupScreen(Screen[Settings]):
         yield OptionList(*PROVIDER_NAME_LIST, id="choice", compact=True)
         yield Input(id="prompt", compact=True)
         yield Static(id="note")
+        yield ProviderKeyLink()
         yield Message()
 
     def on_mount(self) -> None:
@@ -102,7 +103,14 @@ class SetupScreen(Screen[Settings]):
         self.provider_name = provider_name
         self.query_one("#progress", Static).update(f"{DONE} Provider   {provider_name}\n{CURRENT} API key")
         self.query_one("#note", Static).update(API_KEY_NOTE_MAP[provider_name])
+        self.query_one(ProviderKeyLink).show_provider(provider_name)
         self._show_input(SetupStep.API_KEY)
+
+    def action_open_provider(self) -> None:
+        """Open the chosen provider in the browser while entering its API key."""
+
+        if self.step == SetupStep.API_KEY:
+            self.query_one(ProviderKeyLink).action_open_link()
 
     @work
     async def check_api_key(self, api_key: str) -> None:
@@ -125,6 +133,7 @@ class SetupScreen(Screen[Settings]):
     def _show_disk_step(self) -> None:
         """Offer the default disk size for editing."""
 
+        self.query_one(ProviderKeyLink).display = False
         label = "Minimum disk (GiB)" if self.provider_name == ProviderName.LAMBDA else "Disk (GB)"
         self.query_one("#progress", Static).update(
             f"{DONE} Provider   {self.provider_name}\n{DONE} API key    ••••\n{CURRENT} {label}"

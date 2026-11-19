@@ -62,6 +62,10 @@ DataTable > .datatable--header, DataTable:focus > .datatable--header {
     border-left: solid $panel;
 }
 
+ProviderKeyLink {
+    max-width: 100%;
+}
+
 #key-source {
     width: 1fr;
     padding-right: 2;
