@@ -4,6 +4,7 @@ import click
 
 from galloc.core import services, storage
 from galloc.core.exceptions import GPUNotFound
+from galloc.core.ssh_keys import configured_key_path
 from galloc.core.validators import prepare_instance_operation
 from galloc.providers.factory import open_provider
 from galloc.settings import Settings
@@ -25,4 +26,4 @@ def get_command(settings: Settings, gpu_id: UUID | str, output: str) -> None:
 
     if instance is None:
         raise GPUNotFound(f"GPU {gpu.name} was not found.")
-    print_gpu(gpu, output, instance)
+    print_gpu(gpu, output, instance, configured_key_path(settings, gpu.provider))

@@ -1,17 +1,10 @@
 from pathlib import Path
 
 from galloc.config import save_config_value
-from galloc.core.ssh_keys import read_local_key_pair
+from galloc.core.ssh_keys import configured_key_path, read_local_key_pair
 from galloc.exceptions import InvalidSSHKey
 from galloc.providers.factory import open_provider
 from galloc.settings import Settings
-
-
-def configured_key_path(settings: Settings, provider_name: str) -> Path | None:
-    """Resolve the provider's preferred public key, falling back to the shared default."""
-
-    path = getattr(settings, f"{provider_name}_ssh_public_key") or settings.ssh_public_key
-    return path.expanduser().absolute() if path is not None else None
 
 
 def find_registered_key(settings: Settings, provider_name: str) -> Path | None:

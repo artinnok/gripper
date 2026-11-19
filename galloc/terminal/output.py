@@ -1,10 +1,12 @@
 import json
 from decimal import Decimal
+from pathlib import Path
 
 import click
 
 from galloc.core.pricing import calculate_cost
 from galloc.core.schemas import GPU, Creation
+from galloc.core.ssh_keys import format_ssh_command
 from galloc.core.ttl import format_ttl
 from galloc.providers.schemas import Instance
 
@@ -25,16 +27,16 @@ def print_creation_estimate(creation: Creation, budget: str | None) -> None:
     click.echo("Estimate only; disk/tax extra. Auto-delete requires an open galloc TUI; no spending cap.", err=True)
 
 
-def print_created_gpu(gpu: GPU, output: str, instance: Instance) -> None:
+def print_created_gpu(gpu: GPU, output: str, instance: Instance, public_key_path: Path | None) -> None:
     """Show a compact ready result and the commands needed to use and remove it."""
 
     if output == "json":
-        print_gpu(gpu, output, instance)
+        print_gpu(gpu, output, instance, public_key_path)
     else:
         click.echo()
         click.echo(f"{'NAME':12}  {'STATUS':10}  {'REGION':12}  TTL ENDS (UTC)")
         click.echo(f"{gpu.name:12}  {instance.status:10}  {instance.region or '-':12}  {gpu.expires_at:%Y-%m-%d %H:%M}")
-        click.echo(f"\nSSH     {instance.ssh_command}")
+        click.echo(f"\nSSH     {format_ssh_command(instance.ssh_command, public_key_path)}")
     click.echo(f"Delete  galloc rm {gpu.name}", err=True)
 
 
@@ -47,7 +49,7 @@ def print_removal(gpu: GPU, output: str) -> None:
     click.echo(gpu.name)
 
 
-def print_gpu(gpu: GPU, output: str, instance: Instance) -> None:
+def print_gpu(gpu: GPU, output: str, instance: Instance, public_key_path: Path | None) -> None:
     """Combine a local name and deadline with the current provider response."""
 
     if output == "json":
@@ -63,7 +65,7 @@ def print_gpu(gpu: GPU, output: str, instance: Instance) -> None:
         ("GPU", instance.gpu or "-"),
         ("Region", instance.region or "-"),
         ("Created at", instance.created_at.isoformat()),
-        ("SSH", instance.ssh_command or "-"),
+        ("SSH", format_ssh_command(instance.ssh_command, public_key_path) or "-"),
     ]
     for label, value in field_list:
         click.echo(f"{label}: {value}")

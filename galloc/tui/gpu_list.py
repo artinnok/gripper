@@ -14,7 +14,7 @@ from textual.widgets import DataTable, Input, Static
 
 from galloc.core.exceptions import InvalidTTL
 from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import format_ssh_command
+from galloc.core.ssh_keys import configured_key_path, format_ssh_command
 from galloc.core.ttl import calculate_expires_at
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected
@@ -24,7 +24,6 @@ from galloc.tui.add import AddScreen
 from galloc.tui.gpu_details import format_gpu, format_status, format_time_left
 from galloc.tui.message import Message
 from galloc.tui.provider.list import ProviderListScreen
-from galloc.tui.ssh_key.access import configured_key_path
 from galloc.tui.ssh_key.list import SSHKeyListScreen
 from galloc.tui.startup import StartupScreen
 

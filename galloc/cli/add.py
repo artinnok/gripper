@@ -4,6 +4,7 @@ import click
 
 from galloc.core import services
 from galloc.core.schemas import GPU, Creation
+from galloc.core.ssh_keys import configured_key_path
 from galloc.core.storage import open_database
 from galloc.core.validators import prepare_creation
 from galloc.providers.base import Provider
@@ -49,7 +50,7 @@ def add_command(
         created_gpu, instance = _create_gpu(connection, provider, creation)
         instance = wait_for_gpu(provider, created_gpu, instance, settings)
 
-    print_created_gpu(created_gpu, output, instance)
+    print_created_gpu(created_gpu, output, instance, configured_key_path(settings, provider_name))
 
 
 def _validate_limit(ttl: str | None, budget: str | None) -> None:

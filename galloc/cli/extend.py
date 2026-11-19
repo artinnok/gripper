@@ -3,6 +3,7 @@ from uuid import UUID
 import click
 
 from galloc.core.services import extend_gpu, get_gpu
+from galloc.core.ssh_keys import configured_key_path
 from galloc.core.storage import lock_deadlines, open_database, transaction
 from galloc.core.ttl import parse_ttl
 from galloc.core.validators import prepare_extension, prepare_instance_operation
@@ -29,4 +30,4 @@ def extend_command(settings: Settings, gpu_id: UUID | str, ttl: str, output: str
             gpu = prepare_extension(connection, gpu_id, ttl, instance)
             gpu = extend_gpu(connection, gpu)
 
-    print_gpu(gpu, output, instance)
+    print_gpu(gpu, output, instance, configured_key_path(settings, gpu.provider))
