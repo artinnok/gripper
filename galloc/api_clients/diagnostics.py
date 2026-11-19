@@ -18,6 +18,7 @@ SECRET_FIELD_PART_LIST = (
     "secret",
     "privatekey",
     "passphrase",
+    "jupyterurl",
 )
 
 
