@@ -1,5 +1,4 @@
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -43,16 +42,6 @@ def configured_key_path(settings: Settings, provider_name: str) -> Path | None:
 
     path = getattr(settings, f"{provider_name}_ssh_public_key") or settings.ssh_public_key
     return path.expanduser().absolute() if path is not None else None
-
-
-def format_ssh_command(command: str | None, public_key_path: Path | None) -> str | None:
-    """Use the chosen local identity without changing the provider's host, port, or other SSH options."""
-
-    if command is None or public_key_path is None:
-        return command
-    executable, *argument_list = shlex.split(command)
-    private_key_path = public_key_path.expanduser().with_suffix("")
-    return shlex.join([executable, "-i", str(private_key_path), *argument_list])
 
 
 def parse_public_key(value: str) -> SSHKey:

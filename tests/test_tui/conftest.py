@@ -1,7 +1,8 @@
 import asyncio
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -121,3 +122,13 @@ def expired_gpu(settings, gpu):
     with storage.open_database(settings.database_path) as connection:
         storage.update_gpu_expiration(connection, gpu)
     return gpu
+
+
+@pytest.fixture
+def ssh_session(monkeypatch):
+    """Give headless tests an SSH client without opening a terminal or a network connection."""
+
+    run_ssh = AsyncMock(return_value=0)
+    monkeypatch.setattr(GallocApp, "suspend", lambda app: nullcontext())
+    monkeypatch.setattr("galloc.tui.gpu_list.run_ssh", run_ssh)
+    return run_ssh

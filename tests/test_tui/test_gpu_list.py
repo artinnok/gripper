@@ -89,6 +89,13 @@ def test_delete_runs_only_after_confirmation(settings, config_path, runpod_http,
         assert "No GPUs." in pilot.app.screen.query_one("#info", Static).content
         assert "Deleted gpu-1" in pilot.app.screen.query_one(Message).content
 
+        keys = pilot.app.screen.query_one("#keys", Static)
+        assert " ".join(keys.render_line(0).text.split()) == "a add k ssh keys p providers r refresh q quit"
+        await pilot.press("e", "d", "s")
+        assert pilot.app.screen.pending_action is None
+        await pilot.press("q", "escape")
+        assert "extend" not in keys.content
+
     run_app(GallocApp(settings, config_path), scenario)
 
     assert runpod_http.call_args_list[-1].args[0].method == "DELETE"
@@ -138,12 +145,19 @@ def test_failed_refresh_hides_stale_status_and_can_reload(settings, config_path,
         await settle(pilot)
         assert screen.query_one(DataTable).row_count == 0
         assert "unavailable" in screen.query_one("#info", Static).content
+        keys = screen.query_one("#keys", Static)
+        assert "extend" not in keys.content
+        assert "delete" not in keys.content
+        assert " SSH" not in keys.content
         with storage.open_database(settings.database_path) as connection:
             assert storage.get_gpu_list(connection) == [gpu]
 
         await pilot.press("r")
         await settle(pilot)
         assert screen.query_one(DataTable).row_count == 1
+        assert "extend" in keys.content
+        assert "delete" in keys.content
+        assert " SSH" in keys.content
 
     run_app(GallocApp(settings, config_path), scenario)
 

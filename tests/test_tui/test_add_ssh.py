@@ -1,5 +1,4 @@
 import json
-import shlex
 
 import httpx
 import pytest
@@ -20,7 +19,7 @@ from tests.test_tui.test_add import serve_catalog
 
 @pytest.mark.parametrize("source", ["local", "custom", "generate"])
 def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
-    config_path, write_config, home, runpod_http, vast_http, vast_offer_data, vast_instance_data, source
+    config_path, write_config, home, runpod_http, vast_http, vast_offer_data, vast_instance_data, source, ssh_session
 ):
     """Register with the chosen provider, then rent once and keep the selected identity after restarting."""
 
@@ -31,6 +30,7 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
     private_path = home / ".ssh" / "galloc_ed25519"
     if source == "custom":
         private_path = home / "custom keys" / "vast identity"
+    expected_ssh_arguments = ["ssh", "-i", str(private_path), "root@ssh1.vast.ai", "-p", "12345"]
     public_path = private_path.with_name(f"{private_path.name}.pub")
     if source != "generate":
         generate_key_pair(private_path)
@@ -91,8 +91,8 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
         await pilot.press("enter", "enter", "3", "0", "m", "enter")
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
-        await pilot.press("c")
-        assert shlex.split(pilot.app.clipboard) == ["ssh", "-i", str(private_path), "root@ssh1.vast.ai", "-p", "12345"]
+        await pilot.press("s")
+        ssh_session.assert_awaited_once_with(expected_ssh_arguments)
         assert "-i " in pilot.app.screen.query_one("#info", Static).content
 
     run_app(GallocApp(settings, config_path), scenario)
@@ -103,11 +103,13 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
     assert sum(call.args[0].method == "PUT" for call in vast_http.call_args_list) == 1
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
+    ssh_session.reset_mock()
+
     async def restart(pilot):
         """Keep the usable SSH command and skip key selection when adding another GPU at the same provider."""
 
-        await pilot.press("c")
-        assert shlex.split(pilot.app.clipboard)[1:3] == ["-i", str(private_path)]
+        await pilot.press("s")
+        ssh_session.assert_awaited_once_with(expected_ssh_arguments)
         await pilot.press("a")
         await settle(pilot)
         await pilot.press("down", "enter")

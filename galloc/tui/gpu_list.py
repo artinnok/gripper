@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from textual import work
-from textual.app import ComposeResult
+from textual.app import ComposeResult, SuspendNotSupported
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.markup import escape
@@ -14,7 +14,7 @@ from textual.widgets import DataTable, Input, Static
 
 from galloc.core.exceptions import InvalidTTL
 from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import configured_key_path, format_ssh_command
+from galloc.core.ssh_keys import configured_key_path
 from galloc.core.ttl import calculate_expires_at
 from galloc.exceptions import GallocError
 from galloc.providers.exceptions import CreationRejected
@@ -24,17 +24,13 @@ from galloc.tui.add import AddScreen
 from galloc.tui.gpu_details import format_gpu, format_status, format_time_left
 from galloc.tui.message import Message
 from galloc.tui.provider.list import ProviderListScreen
+from galloc.tui.ssh import run_ssh
 from galloc.tui.ssh_key.list import SSHKeyListScreen
 from galloc.tui.startup import StartupScreen
 
 
 REFRESH_INTERVAL = 30
 COUNTDOWN_INTERVAL = 1
-LIST_KEYS = (
-    "[$foreground]a[/] add   [$foreground]e[/] extend   [$foreground]d[/] delete   "
-    "[$foreground]c[/] copy SSH   "
-    "[$foreground]k[/] ssh keys   [$foreground]p[/] providers   [$foreground]r[/] refresh   [$foreground]q[/] quit"
-)
 QUESTION_KEYS = "[$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
 QUIT_KEYS = "[$foreground]q[/] or [$foreground]enter[/] confirm   [$foreground]esc[/] cancel"
 QUIT_WARNING = (
@@ -43,28 +39,36 @@ QUIT_WARNING = (
 )
 
 
-class PendingAction(StrEnum):
-    """Name the action whose question the detail column holds in place of the selected GPU's details."""
+class GPUListAction(StrEnum):
+    """Name the actions used by the GPU list's key bindings and confirmation prompts."""
 
+    ADD = "add"
     EXTEND = "extend"
     DELETE = "delete"
+    SSH = "ssh"
+    SSH_KEYS = "ssh_keys"
+    PROVIDERS = "providers"
+    REFRESH = "refresh"
+    CONFIRM = "confirm"
+    CANCEL = "cancel"
     QUIT = "quit"
+    QUIT_OR_CONFIRM = "quit_or_confirm"
 
 
 class GPUListScreen(Screen):
     """List GPUs beside the selected GPU's details and ask every question in that detail column."""
 
     BINDINGS = [
-        Binding("a", "add", "Add GPU"),
-        Binding("e", "extend", "Extend TTL"),
-        Binding("d", "delete", "Delete GPU"),
-        Binding("c", "copy_ssh", "Copy SSH"),
-        Binding("k", "ssh_keys", "SSH keys"),
-        Binding("p", "providers", "Providers"),
-        Binding("r", "refresh", "Refresh"),
-        Binding("enter", "confirm", "Confirm"),
-        Binding("escape", "cancel", "Cancel"),
-        Binding("q", "quit_or_confirm", "Quit"),
+        Binding("a", GPUListAction.ADD, "add"),
+        Binding("e", GPUListAction.EXTEND, "extend"),
+        Binding("d", GPUListAction.DELETE, "delete"),
+        Binding("s", GPUListAction.SSH, "SSH"),
+        Binding("k", GPUListAction.SSH_KEYS, "ssh keys"),
+        Binding("p", GPUListAction.PROVIDERS, "providers"),
+        Binding("r", GPUListAction.REFRESH, "refresh"),
+        Binding("enter", GPUListAction.CONFIRM, "Confirm", show=False),
+        Binding("escape", GPUListAction.CANCEL, "Cancel", show=False),
+        Binding("q", GPUListAction.QUIT_OR_CONFIRM, "quit"),
     ]
 
     def __init__(self) -> None:
@@ -73,7 +77,7 @@ class GPUListScreen(Screen):
         super().__init__()
         # None means the last provider read failed, so no status is shown instead of a stale one.
         self.result_list: list[tuple[GPU, Instance]] | None = []
-        self.pending_action: PendingAction | None = None
+        self.pending_action: GPUListAction | None = None
         self.pending_gpu: GPU | None = None
 
     def compose(self) -> ComposeResult:
@@ -87,7 +91,7 @@ class GPUListScreen(Screen):
                 yield Input(id="prompt", placeholder="1h", compact=True)
                 yield Static(id="preview")
                 yield Message()
-        yield Static(LIST_KEYS, id="keys")
+        yield Static(id="keys")
 
     def on_mount(self) -> None:
         """Load the list now and keep it and its countdowns current while the screen stays open."""
@@ -98,6 +102,7 @@ class GPUListScreen(Screen):
         table.focus()
         self.query_one(Input).display = False
         self._show_header()
+        self._show_detail()
 
         self.refresh_gpu_list()
         self.set_interval(REFRESH_INTERVAL, self.action_refresh)
@@ -159,22 +164,36 @@ class GPUListScreen(Screen):
     def _get_selected_gpu(self) -> GPU | None:
         """Return the GPU under the cursor, or None while there is nothing to select."""
 
+        selected_row = self._get_selected_row()
+        if selected_row is None:
+            return None
+        gpu, _ = selected_row
+        return gpu
+
+    def _get_selected_row(self) -> tuple[GPU, Instance] | None:
+        """Return the local GPU and its live instance under the table cursor."""
+
         if not self.result_list:
             return None
-
-        gpu, instance = self.result_list[self.query_one(DataTable).cursor_row]
-        return gpu
+        return self.result_list[self.query_one(DataTable).cursor_row]
 
     def _show_detail(self) -> None:
         """Describe the selected GPU, or say why there is nothing to describe."""
 
+        keys = "   ".join(
+            f"[$foreground]{binding.key}[/] {binding.description}"
+            for binding in self.BINDINGS
+            if binding.show and self.check_action(binding.action, ())
+        )
+        self.query_one("#keys", Static).update(keys)
         info = self.query_one("#info", Static)
+        selected_row = self._get_selected_row()
         if self.result_list is None:
             info.update("[$muted]Provider data unavailable.[/]")
-        elif not self.result_list:
+        elif selected_row is None:
             info.update("[$muted]No GPUs.[/]")
         else:
-            gpu, instance = self.result_list[self.query_one(DataTable).cursor_row]
+            gpu, instance = selected_row
             info.update(format_gpu(gpu, instance, configured_key_path(self.app.settings, gpu.provider)))
 
     def on_data_table_row_highlighted(self) -> None:
@@ -188,7 +207,7 @@ class GPUListScreen(Screen):
 
         table = self.query_one(DataTable)
         now = datetime.now(UTC)
-        for gpu, instance in self.result_list or []:
+        for gpu, _ in self.result_list or []:
             table.update_cell(gpu.name, "LEFT", format_time_left(gpu, now), update_width=True)
 
     def action_add(self, error: str = "") -> None:
@@ -223,19 +242,32 @@ class GPUListScreen(Screen):
 
         self.app.push_screen(SSHKeyListScreen())
 
-    def action_copy_ssh(self) -> None:
-        """Copy the selected GPU's complete SSH command without relying on mouse text selection."""
+    async def action_ssh(self) -> None:
+        """Open the selected GPU in this terminal and resume the list when SSH exits."""
 
-        if self.pending_action is not None or not self.result_list:
+        selected_row = self._get_selected_row()
+        if self.pending_action is not None or selected_row is None:
             return
-        gpu, instance = self.result_list[self.query_one(DataTable).cursor_row]
-        if not instance.ssh_command:
-            self.query_one(Message).show("SSH is not available yet.", error=True)
+        gpu, instance = selected_row
+        message = self.query_one(Message)
+        if instance.ssh is None:
+            message.show("SSH is not available yet.", error=True)
             return
 
-        command = format_ssh_command(instance.ssh_command, configured_key_path(self.app.settings, gpu.provider))
-        self.app.copy_to_clipboard(command)
-        self.query_one(Message).show("SSH command copied.")
+        public_key_path = configured_key_path(self.app.settings, gpu.provider)
+        argument_list = instance.ssh.build_argument_list(public_key_path)
+        try:
+            with self.app.batch_update(), self.app.suspend():
+                status = await run_ssh(argument_list)
+        except SuspendNotSupported as exception:
+            message.show(str(exception), error=True)
+            return
+        except (OSError, ValueError) as exception:
+            message.show(f"Could not start SSH: {exception}", error=True)
+            return
+
+        if status:
+            message.show(f"SSH exited with status {status}.", error=True)
 
     def action_providers(self) -> None:
         """Open provider API keys and the choice of the default provider."""
@@ -248,7 +280,7 @@ class GPUListScreen(Screen):
         gpu = self._get_selected_gpu()
         if gpu is None:
             return
-        self._show_question(PendingAction.EXTEND, gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]")
+        self._show_question(GPUListAction.EXTEND, gpu, f"[b $primary]{gpu.name}[/] [$muted]· extend[/]")
 
         prompt = self.query_one(Input)
         prompt.display = True
@@ -257,7 +289,7 @@ class GPUListScreen(Screen):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Preview the new deadline while a valid extension is being typed."""
 
-        if self.pending_action != PendingAction.EXTEND:
+        if self.pending_action != GPUListAction.EXTEND:
             return
 
         preview = self.query_one("#preview", Static)
@@ -283,7 +315,7 @@ class GPUListScreen(Screen):
         if gpu is None:
             return
         self._show_question(
-            PendingAction.DELETE,
+            GPUListAction.DELETE,
             gpu,
             f"[b $primary]{gpu.name}[/] [$muted]· delete[/]\n\nDelete {gpu.name} and its resources?",
         )
@@ -292,7 +324,7 @@ class GPUListScreen(Screen):
     def action_quit_or_confirm(self) -> None:
         """Open the exit warning with q and confirm it when q is pressed again."""
 
-        if self.pending_action == PendingAction.QUIT:
+        if self.pending_action == GPUListAction.QUIT:
             self.app.confirm_quit()
         else:
             self.action_quit()
@@ -302,11 +334,11 @@ class GPUListScreen(Screen):
 
         self._close_prompt()
         self.query_one(Message).update("")
-        self._show_question(PendingAction.QUIT, None, QUIT_WARNING)
+        self._show_question(GPUListAction.QUIT, None, QUIT_WARNING)
         self.query_one("#keys", Static).update(QUIT_KEYS)
         self.set_focus(None)
 
-    def _show_question(self, action: PendingAction, gpu: GPU | None, text: str) -> None:
+    def _show_question(self, action: GPUListAction, gpu: GPU | None, text: str) -> None:
         """Replace the details with one action's question and remember what it applies to."""
 
         self.pending_action = action
@@ -315,16 +347,24 @@ class GPUListScreen(Screen):
         self.query_one("#keys", Static).update(QUESTION_KEYS)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
-        """Accept only an answer, or the exit key, while deletion or exit waits for confirmation."""
+        """Enable list actions for the current selection and confirmation keys for an open question."""
 
-        if self.pending_action in {PendingAction.DELETE, PendingAction.QUIT}:
-            return action in {"confirm", "cancel", "quit_or_confirm"}
-        return action != "confirm"
+        if self.pending_action in {GPUListAction.DELETE, GPUListAction.QUIT}:
+            return action in {GPUListAction.CONFIRM, GPUListAction.CANCEL, GPUListAction.QUIT_OR_CONFIRM}
+        if action in {GPUListAction.EXTEND, GPUListAction.DELETE}:
+            return bool(self.result_list)
+        if action == GPUListAction.SSH:
+            selected_row = self._get_selected_row()
+            if selected_row is None:
+                return False
+            _, instance = selected_row
+            return instance.ssh is not None
+        return action != GPUListAction.CONFIRM
 
     def action_confirm(self) -> None:
         """Perform the action named in the open confirmation."""
 
-        if self.pending_action == PendingAction.QUIT:
+        if self.pending_action == GPUListAction.QUIT:
             self.app.confirm_quit()
             return
 
@@ -340,7 +380,6 @@ class GPUListScreen(Screen):
         self.pending_gpu = None
 
         self._close_prompt()
-        self.query_one("#keys", Static).update(LIST_KEYS)
         self.query_one(DataTable).focus()
         self._show_detail()
 
