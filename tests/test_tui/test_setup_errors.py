@@ -3,7 +3,7 @@ import json
 import threading
 
 import httpx
-from textual.widgets import Input, OptionList
+from textual.widgets import Input, OptionList, Static
 
 from galloc.core.ssh_keys import read_public_key
 from galloc.tui.app import GallocApp
@@ -47,6 +47,11 @@ def test_invalid_disk_stays_editable_before_registration(settings, config_path, 
         await pilot.press("enter")
         assert screen.step == SetupStep.SSH_KEY
         assert screen.query_one(OptionList).has_focus
+        progress = screen.query_one("#progress", Static).content
+        assert "••••" in progress
+        assert "entered-token" not in progress
+        assert "80 GB" in progress
+        assert progress.endswith("SSH key")
 
     run_app(GallocApp(settings, config_path), scenario)
 

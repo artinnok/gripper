@@ -8,6 +8,7 @@ from textual.containers import Horizontal, Vertical
 from textual.markup import escape
 from textual.screen import Screen
 from textual.widgets import Input, OptionList, Static
+from textual.widgets.option_list import Option
 
 from galloc.core.ssh_keys import generate_key_pair, read_local_key_pair, read_public_key
 from galloc.exceptions import GallocError
@@ -17,17 +18,28 @@ from galloc.tui.add_steps import AddStep, format_progress
 from galloc.tui.message import Message
 from galloc.tui.ssh_key.access import remember_key
 from galloc.tui.ssh_key.details import format_ssh_key
+from galloc.tui.ssh_key.options import KeyStep, LocalKeyOption, get_local_key_option_list
+from galloc.tui.wizard import WizardStep
 
 
-KEYS_MAP = {
-    "choose": (
-        "[$foreground]↑↓[/] move   [$foreground]enter[/] select   [$foreground]r[/] refresh   [$foreground]esc[/] back"
+KEY_STEPS = {
+    KeyStep.CHOOSE: WizardStep(
+        "Local public keys",
+        "[$foreground]↑↓[/] move   [$foreground]enter[/] select   [$foreground]r[/] refresh   [$foreground]esc[/] back",
+        choices=(KeyStep.PATH, KeyStep.GENERATE),
     ),
-    "path": "[$foreground]enter[/] register   [$foreground]esc[/] back",
-    "generate": "[$foreground]enter[/] generate   [$foreground]esc[/] back",
+    KeyStep.PATH: WizardStep(
+        "Public key file (.pub)",
+        "[$foreground]enter[/] register   [$foreground]esc[/] back",
+        previous_step=KeyStep.CHOOSE,
+    ),
+    KeyStep.GENERATE: WizardStep(
+        "New private key path",
+        "[$foreground]enter[/] generate   [$foreground]esc[/] back",
+        previous_step=KeyStep.CHOOSE,
+    ),
 }
-PATH_LABEL_MAP = {"path": "Public key file (.pub)", "generate": "New private key path"}
-PATH_NOTE_MAP = {"path": "", "generate": "Ed25519 · no passphrase"}
+SOURCE_LABELS = {KeyStep.PATH: "Enter public key path…", KeyStep.GENERATE: "Generate new key…"}
 
 
 class SSHKeyAddScreen(Screen[str | None]):
@@ -41,9 +53,7 @@ class SSHKeyAddScreen(Screen[str | None]):
         super().__init__()
         self.provider_name = provider_name
         self.gpu_model = gpu_model
-        self.mode = "choose"
-        self.public_key_path_list: list[Path] = []
-        self.preview_path: Path | None = None
+        self.mode = KeyStep.CHOOSE
         self.busy = False
 
     def compose(self) -> ComposeResult:
@@ -57,13 +67,13 @@ class SSHKeyAddScreen(Screen[str | None]):
 
         with Horizontal():
             with Vertical(id="key-source"):
-                yield Static("Local public keys", id="path-label")
+                yield Static(KEY_STEPS[KeyStep.CHOOSE].title, id="path-label")
                 yield OptionList(id="choice", compact=True)
                 yield Input(id="key-path", compact=True)
             with Vertical(id="detail"):
                 yield Static(id="info")
                 yield Message()
-        yield Static(KEYS_MAP["choose"], id="keys")
+        yield Static(KEY_STEPS[KeyStep.CHOOSE].keys, id="keys")
 
     def on_mount(self) -> None:
         """Discover local public key files before accepting a choice."""
@@ -73,41 +83,67 @@ class SSHKeyAddScreen(Screen[str | None]):
     def action_refresh(self) -> None:
         """Reload local key choices without changing the provider or configuration."""
 
-        self.mode = "choose"
-        self.preview_path = None
-        self.public_key_path_list = sorted((Path.home() / ".ssh").glob("*.pub"))
-        self.query_one(Input).display = False
-        self.query_one("#path-label", Static).update("Local public keys")
-        self.query_one("#keys", Static).update(KEYS_MAP["choose"])
+        self._show_step(KeyStep.CHOOSE)
 
+    def _show_step(self, step: KeyStep, value: str = "") -> None:
+        """Show the key sources or the selected source's path field."""
+
+        self.mode = step
+        definition = KEY_STEPS[step]
+        self.query_one("#path-label", Static).update(definition.title)
+        self.query_one("#keys", Static).update(definition.keys)
+        if step == KeyStep.CHOOSE:
+            self._show_local_keys()
+        elif step == KeyStep.GENERATE:
+            self._show_path_input("~/.ssh/galloc_ed25519", "Ed25519 · no passphrase")
+        else:
+            self._show_path_input(value)
+
+    def _show_local_keys(self) -> None:
+        """Offer each local public key, followed by the two ways to supply another key."""
+
+        option_list = get_local_key_option_list()
+        for step in KEY_STEPS[KeyStep.CHOOSE].choices:
+            option_list.append(Option(SOURCE_LABELS[step], id=step))
+
+        self.query_one(Input).display = False
+        self.query_one("#info", Static).update("")
         choice = self.query_one(OptionList)
-        choice.clear_options()
-        choice.add_options([escape(path.name) for path in self.public_key_path_list])
-        choice.add_options(["Enter public key path…", "Generate new key…"])
-        choice.highlighted = 0
         choice.display = True
+        choice.set_options(option_list)
+        choice.highlighted = 0
         choice.focus()
 
-    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        """Preview the local key or describe the selected source action."""
+    def _show_path_input(self, value: str, detail: str = "") -> None:
+        """Focus the path field for an existing or new key."""
 
-        if event.option_index < len(self.public_key_path_list):
-            self.preview_path = self.public_key_path_list[event.option_index]
-            self.preview_key(self.preview_path)
+        self.query_one(OptionList).display = False
+        self.query_one("#info", Static).update(detail)
+        prompt = self.query_one(Input)
+        prompt.display = True
+        prompt.value = value
+        prompt.focus()
+
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        """Preview a highlighted key while the list is visible."""
+
+        if self.mode != KeyStep.CHOOSE:
+            return
+        if isinstance(event.option, LocalKeyOption):
+            self.preview_key(event.option)
         else:
-            self.preview_path = None
             self.query_one("#info", Static).update("")
 
     @work(exclusive=True, group="preview")
-    async def preview_key(self, path: Path) -> None:
+    async def preview_key(self, option: LocalKeyOption) -> None:
         """Read and validate a local public key off the input loop."""
 
         try:
-            ssh_key = await asyncio.to_thread(read_public_key, path)
+            ssh_key = await asyncio.to_thread(read_public_key, option.path)
             detail = format_ssh_key(ssh_key)
         except (GallocError, OSError) as exception:
             detail = f"[$error]{escape(str(exception))}[/]"
-        if self.mode == "choose" and self.preview_path == path:
+        if self.mode == KeyStep.CHOOSE and self.query_one(OptionList).highlighted_option is option:
             self.query_one("#info", Static).update(detail)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -115,26 +151,10 @@ class SSHKeyAddScreen(Screen[str | None]):
 
         if self.busy:
             return
-        if event.option_index < len(self.public_key_path_list):
-            self._submit(self.public_key_path_list[event.option_index])
-        elif event.option_index == len(self.public_key_path_list):
-            self._show_path("path", "")
+        if isinstance(event.option, LocalKeyOption):
+            self._submit(event.option.path)
         else:
-            self._show_path("generate", "~/.ssh/galloc_ed25519")
-
-    def _show_path(self, mode: str, value: str) -> None:
-        """Display an explicitly labelled path field in the left pane."""
-
-        self.mode = mode
-        self.query_one(OptionList).display = False
-        self.query_one("#path-label", Static).update(PATH_LABEL_MAP[mode])
-        self.query_one("#info", Static).update(PATH_NOTE_MAP[mode])
-        self.query_one("#keys", Static).update(KEYS_MAP[mode])
-
-        prompt = self.query_one(Input)
-        prompt.value = value
-        prompt.display = True
-        prompt.focus()
+            self._show_step(KeyStep(event.option_id))
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Keep an empty field open and submit a real path only once."""
@@ -145,7 +165,7 @@ class SSHKeyAddScreen(Screen[str | None]):
         if not value:
             self.query_one(Message).show("Enter a key file path.", error=True)
             return
-        self._submit(Path(value).expanduser(), generate=self.mode == "generate")
+        self._submit(Path(value).expanduser(), generate=self.mode == KeyStep.GENERATE)
 
     def _submit(self, path: Path, *, generate: bool = False) -> None:
         """Disable input before starting an operation that creates files or writes provider keys."""
@@ -164,7 +184,7 @@ class SSHKeyAddScreen(Screen[str | None]):
         try:
             if generate:
                 path = await asyncio.to_thread(generate_key_pair, path)
-                self._show_path("path", str(path))
+                self._show_step(KeyStep.PATH, str(path))
             read_key = read_local_key_pair if self.gpu_model is not None else read_public_key
             key = await asyncio.to_thread(read_key, path)
             message = await asyncio.to_thread(
@@ -186,10 +206,10 @@ class SSHKeyAddScreen(Screen[str | None]):
         self.busy = False
         self.query_one(OptionList).disabled = False
         self.query_one(Input).disabled = False
-        self.query_one("#keys", Static).update(KEYS_MAP[self.mode])
+        self.query_one("#keys", Static).update(KEY_STEPS[self.mode].keys)
         self.query_one(Message).show(message, error=True)
 
-        if self.mode == "choose":
+        if self.mode == KeyStep.CHOOSE:
             self.query_one(OptionList).focus()
         else:
             self.query_one(Input).focus()
@@ -199,12 +219,13 @@ class SSHKeyAddScreen(Screen[str | None]):
 
         if self.busy:
             return False
-        return action != "refresh" or self.mode == "choose"
+        return action != "refresh" or self.mode == KeyStep.CHOOSE
 
     def action_back(self) -> None:
         """Return from path entry to local choices, or close the add screen."""
 
-        if self.mode != "choose":
-            self.action_refresh()
+        previous = KEY_STEPS[self.mode].previous_step
+        if previous is not None:
+            self._show_step(previous)
             return
         self.dismiss(None)

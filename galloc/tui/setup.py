@@ -6,9 +6,9 @@ from pydantic import SecretStr, ValidationError
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.markup import escape
 from textual.screen import Screen
 from textual.widgets import Input, OptionList, Static
+from textual.widgets.option_list import Option
 
 from galloc.core.ssh_keys import generate_key_pair
 from galloc.exceptions import GallocError
@@ -18,7 +18,8 @@ from galloc.settings import Settings
 from galloc.tui import operations
 from galloc.tui.message import Message
 from galloc.tui.provider.details import API_KEY_NOTE_MAP, ProviderKeyLink
-from galloc.tui.theme import CURRENT, DONE
+from galloc.tui.ssh_key.options import KeyStep, LocalKeyOption, get_local_key_option_list
+from galloc.tui.wizard import WizardStep, render_progress
 
 
 class SetupStep(StrEnum):
@@ -29,6 +30,15 @@ class SetupStep(StrEnum):
     DISK = "disk"
     SSH_KEY = "ssh_key"
     KEY_PATH = "key_path"
+
+
+SETUP_STEPS = {
+    SetupStep.PROVIDER: WizardStep("Provider", next_step=SetupStep.API_KEY),
+    SetupStep.API_KEY: WizardStep("API key", next_step=SetupStep.DISK),
+    SetupStep.DISK: WizardStep("Disk", next_step=SetupStep.SSH_KEY),
+    SetupStep.SSH_KEY: WizardStep("SSH key", next_step=SetupStep.KEY_PATH),
+    SetupStep.KEY_PATH: WizardStep("SSH key", previous_step=SetupStep.SSH_KEY),
+}
 
 
 class SetupScreen(Screen[Settings]):
@@ -44,7 +54,6 @@ class SetupScreen(Screen[Settings]):
         self.provider_name = ""
         self.api_key = ""
         self.confirmed_settings: Settings | None = None
-        self.public_key_path_list: list[Path] = []
         self.busy = False
 
     def compose(self) -> ComposeResult:
@@ -61,9 +70,7 @@ class SetupScreen(Screen[Settings]):
     def on_mount(self) -> None:
         """Begin with the provider list as the only active widget."""
 
-        self.query_one("#progress", Static).update(f"{CURRENT} Provider")
-        self.query_one(Input).display = False
-        self.query_one(OptionList).focus()
+        self._show_step(SetupStep.PROVIDER)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Take the provider first; the same list later takes the SSH key choice."""
@@ -72,12 +79,13 @@ class SetupScreen(Screen[Settings]):
             return
 
         if self.step == SetupStep.PROVIDER:
-            self._show_api_key_step(PROVIDER_NAME_LIST[event.option_index])
-        elif event.option_index < len(self.public_key_path_list):
-            self._submit(self.public_key_path_list[event.option_index])
-        elif event.option_index == len(self.public_key_path_list):
-            self._show_key_path_step()
-        else:
+            self.provider_name = PROVIDER_NAME_LIST[event.option_index]
+            self._show_step(SETUP_STEPS[self.step].next_step)
+        elif isinstance(event.option, LocalKeyOption):
+            self._submit(event.option.path)
+        elif event.option_id == KeyStep.PATH:
+            self._show_step(SETUP_STEPS[self.step].next_step)
+        elif event.option_id == KeyStep.GENERATE:
             self._submit(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -96,15 +104,6 @@ class SetupScreen(Screen[Settings]):
             self._submit(Path(value).expanduser())
         elif self.step == SetupStep.KEY_PATH:
             self._show_failure("Enter a public key file path.")
-
-    def _show_api_key_step(self, provider_name: str) -> None:
-        """Ask for the key beside the permissions it needs and where to create it."""
-
-        self.provider_name = provider_name
-        self.query_one("#progress", Static).update(f"{DONE} Provider   {provider_name}\n{CURRENT} API key")
-        self.query_one("#note", Static).update(API_KEY_NOTE_MAP[provider_name])
-        self.query_one(ProviderKeyLink).show_provider(provider_name)
-        self._show_input(SetupStep.API_KEY)
 
     def action_open_provider(self) -> None:
         """Open the chosen provider in the browser while entering its API key."""
@@ -128,18 +127,7 @@ class SetupScreen(Screen[Settings]):
         self.confirmed_settings = settings
         self.api_key = api_key
         self.query_one(Input).disabled = False
-        self._show_disk_step()
-
-    def _show_disk_step(self) -> None:
-        """Offer the default disk size for editing."""
-
-        self.query_one(ProviderKeyLink).display = False
-        label = "Minimum disk (GiB)" if self.provider_name == ProviderName.LAMBDA else "Disk (GB)"
-        self.query_one("#progress", Static).update(
-            f"{DONE} Provider   {self.provider_name}\n{DONE} API key    ••••\n{CURRENT} {label}"
-        )
-        self.query_one("#note", Static).update("")
-        self._show_input(SetupStep.DISK, str(self.confirmed_settings.disk_gb))
+        self._show_step(SETUP_STEPS[self.step].next_step)
 
     def _accept_disk(self, value: str) -> None:
         """Apply the shared settings validation before any SSH registration or config write."""
@@ -150,45 +138,64 @@ class SetupScreen(Screen[Settings]):
             self._show_failure("Enter a positive whole number of GB.")
             return
 
-        self._show_ssh_key_step()
+        self._show_step(SETUP_STEPS[self.step].next_step)
 
-    def _show_ssh_key_step(self) -> None:
-        """Offer discovered keys, a custom file path, or generation of a new pair."""
-
-        self.step = SetupStep.SSH_KEY
-        self.public_key_path_list = sorted((Path.home() / ".ssh").glob("*.pub"))
-        self.query_one("#progress", Static).update(
-            f"{DONE} Provider   {self.provider_name}\n{DONE} API key    ••••\n"
-            f"{DONE} Disk       {self.confirmed_settings.disk_gb} GB\n{CURRENT} SSH key"
-        )
-        self.query_one("#note", Static).update("")
-        self.query_one(Input).display = False
-
-        choice = self.query_one(OptionList)
-        choice.clear_options()
-        choice.add_options([escape(f"~/.ssh/{path.name}") for path in self.public_key_path_list])
-        choice.add_options(["Enter public key path…", "Generate new key"])
-        choice.highlighted = 0
-        choice.display = True
-        choice.focus()
-
-    def _show_key_path_step(self, value: str = "") -> None:
-        """Ask for a public key file, starting from a path that is already known."""
-
-        self.query_one("#note", Static).update("Public key file (.pub)")
-        self._show_input(SetupStep.KEY_PATH, value)
-
-    def _show_input(self, step: SetupStep, value: str = "") -> None:
-        """Reuse one field for every typed answer, masking only the API key."""
+    def _show_step(self, step: SetupStep, value: str = "") -> None:
+        """Render the requested field and the answers already confirmed in setup."""
 
         self.step = step
-        self.query_one(OptionList).display = False
+        self._show_progress(step)
+        self._show_note(step)
 
+        choice = self.query_one(OptionList)
         prompt = self.query_one(Input)
+        choice.display = step in {SetupStep.PROVIDER, SetupStep.SSH_KEY}
+        prompt.display = not choice.display
+        if step == SetupStep.SSH_KEY:
+            self._load_key_choices(choice)
+        if choice.display:
+            choice.focus()
+            return
+
+        if step == SetupStep.DISK:
+            value = str(self.confirmed_settings.disk_gb)
         prompt.password = step == SetupStep.API_KEY
         prompt.value = value
-        prompt.display = True
         prompt.focus()
+
+    def _show_progress(self, step: SetupStep) -> None:
+        """Display completed answers and the current question, masking the API key."""
+
+        answers = {SetupStep.PROVIDER: self.provider_name}
+        if self.confirmed_settings is not None:
+            answers[SetupStep.API_KEY] = "••••"
+            answers[SetupStep.DISK] = f"{self.confirmed_settings.disk_gb} GB"
+        title = None
+        if step == SetupStep.DISK:
+            title = "Minimum disk (GiB)" if self.provider_name == ProviderName.LAMBDA else "Disk (GB)"
+        self.query_one("#progress", Static).update(render_progress(SETUP_STEPS, step, answers, title=title))
+
+    def _show_note(self, step: SetupStep) -> None:
+        """Show provider permissions or the expected public key file type when relevant."""
+
+        note = ""
+        link = self.query_one(ProviderKeyLink)
+        link.display = False
+        if step == SetupStep.API_KEY:
+            note = API_KEY_NOTE_MAP[self.provider_name]
+            link.show_provider(self.provider_name)
+        elif step == SetupStep.KEY_PATH:
+            note = "Public key file (.pub)"
+        self.query_one("#note", Static).update(note)
+
+    def _load_key_choices(self, choice: OptionList) -> None:
+        """Offer discovered keys, manual path entry and key generation."""
+
+        option_list = get_local_key_option_list(show_directory=True)
+        option_list.append(Option("Enter public key path…", id=KeyStep.PATH))
+        option_list.append(Option("Generate new key", id=KeyStep.GENERATE))
+        choice.set_options(option_list)
+        choice.highlighted = 0
 
     def _submit(self, public_key_path: Path | None) -> None:
         """Lock the screen and finish setup once; no path asks for a new key pair."""
@@ -207,7 +214,7 @@ class SetupScreen(Screen[Settings]):
             if public_key_path is None:
                 public_key_path = await asyncio.to_thread(generate_key_pair, Path.home() / ".ssh" / "galloc_ed25519")
                 # A refused registration then retries this key instead of generating another one.
-                self._show_key_path_step(str(public_key_path))
+                self._show_step(SetupStep.KEY_PATH, str(public_key_path))
             self.confirmed_settings = await asyncio.to_thread(
                 operations.finish_setup, self.confirmed_settings, self.app.config_path, self.api_key, public_key_path
             )
@@ -233,8 +240,9 @@ class SetupScreen(Screen[Settings]):
     def action_back(self) -> None:
         """Return from a custom path to the key choices; from any other step leave setup."""
 
-        if self.step == SetupStep.KEY_PATH and not self.busy:
-            self._show_ssh_key_step()
+        previous = SETUP_STEPS[self.step].previous_step
+        if previous is not None and not self.busy:
+            self._show_step(previous)
             return
         self.action_quit()
 

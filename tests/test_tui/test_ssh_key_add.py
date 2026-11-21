@@ -16,7 +16,6 @@ def test_local_key_selection_previews_and_registers(settings, config_path, regis
     config_path.touch()
     key_path = home / ".ssh" / "id_ed25519.pub"
     key_path.parent.mkdir()
-    key_path.write_text(SSH_PUBLIC_KEY)
 
     async def scenario(pilot):
         """Choose a visible key, register it, and see the current provider list."""
@@ -27,6 +26,9 @@ def test_local_key_selection_previews_and_registers(settings, config_path, regis
         await settle(pilot)
         screen = pilot.app.screen
         assert isinstance(screen, SSHKeyAddScreen)
+        key_path.write_text(SSH_PUBLIC_KEY)
+        await pilot.press("r")
+        await settle(pilot)
         assert screen.query_one(OptionList).region.right <= screen.query_one("#detail").region.x
         assert SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
         await pilot.press("enter")
