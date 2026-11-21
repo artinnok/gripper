@@ -132,7 +132,11 @@ def test_leaving_during_key_lookup_ignores_its_late_answer(settings, config_path
         info = pilot.app.screen.query_one("#info", Static)
         assert "checking SSH key" in info.render_line(2).text
         try:
-            await pilot.press("escape")
+            screen = pilot.app.screen
+            assert screen.query_one("#progress", Static).content.endswith("GPU")
+            assert screen.query_one(GPUCatalog).display
+            assert screen.query_one("#choice", OptionList).option_count > 0
+            await pilot.press("enter", "r", "escape")
         finally:
             answer_allowed.set()
         await settle(pilot)

@@ -385,7 +385,11 @@ def test_escape_returns_to_the_previous_step(settings, config_path, runpod_http,
         assert not screen.query_one("#limit", Input).display
         assert screen.query_one("#preview", Static).content == ""
 
-        await pilot.press("escape")
+        await pilot.press("up", "enter")
+        assert progress.content.endswith("TTL")
+        assert "Budget" not in progress.content
+        assert screen.query_one("#limit", Input).value == ""
+        await pilot.press("escape", "escape")
         assert progress.content.endswith("Region")
         assert "EU-NL-1" in choice.get_option_at_index(choice.highlighted).prompt
 

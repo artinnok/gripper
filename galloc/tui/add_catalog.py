@@ -47,9 +47,10 @@ class GPUCatalog(Vertical):
     def add_gpu_model_list(self, provider_name: str, gpu_model_list: list[GPUModel]) -> None:
         """Merge one provider's models in price order without moving a cursor the user placed."""
 
-        # A cursor still resting on the first row stays there, so the new most expensive model can take that row.
+        # Keep a chosen GPU under the cursor while its SSH key is checked, even if it was the first row.
         highlighted = None
-        if self.query_one(OptionList).highlighted:
+        cursor_index = self.query_one(OptionList).highlighted
+        if self.disabled or (cursor_index is not None and cursor_index > 0):
             highlighted = self._get_highlighted_gpu_model()
         self.gpu_model_list = sorted(
             self.gpu_model_list + [(provider_name, gpu_model) for gpu_model in gpu_model_list],
@@ -124,8 +125,7 @@ class GPUCatalog(Vertical):
             index = visible_gpu_model_list.index(highlighted)
 
         choice = self.query_one(OptionList)
-        choice.clear_options()
-        choice.add_options(row_list)
+        choice.set_options(row_list)
         choice.highlighted = index
 
     def _get_highlighted_gpu_model(self) -> tuple[str, GPUModel] | None:

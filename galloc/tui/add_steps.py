@@ -2,13 +2,11 @@ from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
 
-from textual.markup import escape
-
 from galloc.core.exceptions import InvalidBudget, InvalidTTL
 from galloc.core.pricing import calculate_budget_ttl, calculate_cost, parse_budget
 from galloc.core.ttl import format_ttl, parse_ttl
 from galloc.providers.schemas import GPUModel, Region
-from galloc.tui.theme import CURRENT, DONE
+from galloc.tui.wizard import WizardStep, render_progress
 
 
 class AddStep(StrEnum):
@@ -22,34 +20,36 @@ class AddStep(StrEnum):
     BUDGET = "budget"
 
 
-CHOICE_KEYS = "[$foreground]↑↓[/] move   [$foreground]enter[/] select   [$foreground]esc[/] back"
-LIMIT_KEYS = "[$foreground]enter[/] create   [$foreground]esc[/] back"
-KEYS_MAP = {
-    AddStep.GPU: f"{CHOICE_KEYS}   [$foreground]/[/] search   [$foreground]r[/] refresh",
-    AddStep.SSH_KEY: "[$foreground]r[/] retry   [$foreground]esc[/] back",
-    AddStep.REGION: CHOICE_KEYS,
-    AddStep.LIMIT: CHOICE_KEYS,
-    AddStep.TTL: LIMIT_KEYS,
-    AddStep.BUDGET: LIMIT_KEYS,
+BACK_KEYS = "[$foreground]esc[/] back"
+CHOICE_KEYS = f"[$foreground]↑↓[/] move   [$foreground]enter[/] select   {BACK_KEYS}"
+LIMIT_KEYS = f"[$foreground]enter[/] create   {BACK_KEYS}"
+
+ADD_STEPS = {
+    AddStep.GPU: WizardStep(
+        "GPU", f"{CHOICE_KEYS}   [$foreground]/[/] search   [$foreground]r[/] refresh", next_step=AddStep.REGION
+    ),
+    AddStep.SSH_KEY: WizardStep(
+        "SSH key", f"[$foreground]r[/] retry   {BACK_KEYS}", next_step=AddStep.REGION, previous_step=AddStep.GPU
+    ),
+    AddStep.REGION: WizardStep("Region", CHOICE_KEYS, next_step=AddStep.LIMIT, previous_step=AddStep.GPU),
+    AddStep.LIMIT: WizardStep(
+        "TTL or budget", CHOICE_KEYS, choices=(AddStep.TTL, AddStep.BUDGET), previous_step=AddStep.REGION
+    ),
+    AddStep.TTL: WizardStep("TTL", LIMIT_KEYS, previous_step=AddStep.LIMIT),
+    AddStep.BUDGET: WizardStep("Budget (USD)", LIMIT_KEYS, previous_step=AddStep.LIMIT),
 }
-LIMIT_LABEL_MAP = {AddStep.TTL: "TTL", AddStep.BUDGET: "Budget (USD)"}
 LIMIT_PLACEHOLDER_MAP = {AddStep.TTL: "30m, 1h, 1d", AddStep.BUDGET: "2.5"}
 
 
 def format_progress(step: AddStep, provider_name: str | None, gpu_model: GPUModel | None, region: Region | None) -> str:
     """List the answered steps above the one that is open."""
 
-    if step == AddStep.GPU:
-        return f"{CURRENT} GPU"
-
-    gpu_line = f"{DONE} GPU      {provider_name} · {escape(gpu_model.name)}  ${gpu_model.hourly_price:.2f}/hour"
-    if step == AddStep.SSH_KEY:
-        return f"{gpu_line}\n{CURRENT} SSH key"
-    if step == AddStep.REGION:
-        return f"{gpu_line}\n{CURRENT} Region"
-
-    label = LIMIT_LABEL_MAP.get(step, "TTL or budget")
-    return f"{gpu_line}\n{DONE} Region   {escape(region.id)}\n{CURRENT} {label}"
+    answers = {}
+    if gpu_model is not None:
+        answers[AddStep.GPU] = f"{provider_name} · {gpu_model.name}  ${gpu_model.hourly_price:.2f}/hour"
+    if region is not None:
+        answers[AddStep.REGION] = region.id
+    return render_progress(ADD_STEPS, step, answers)
 
 
 def parse_limit(step: AddStep, value: str, hourly_price: float) -> timedelta:
@@ -57,7 +57,10 @@ def parse_limit(step: AddStep, value: str, hourly_price: float) -> timedelta:
 
     if step == AddStep.TTL:
         return parse_ttl(value)
-    return parse_ttl(calculate_budget_ttl(parse_budget(value), Decimal(str(hourly_price))))
+
+    budget = parse_budget(value)
+    ttl = calculate_budget_ttl(budget, Decimal(str(hourly_price)))
+    return parse_ttl(ttl)
 
 
 def format_limit_preview(step: AddStep, value: str, hourly_price: float) -> str:
