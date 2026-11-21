@@ -7,6 +7,7 @@ from galloc.api_clients.runpod.schemas import GPUType, Pod
 from galloc.core.ssh_keys import SSHKey, parse_public_key
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable, InvalidGPU, InvalidRegion
+from galloc.providers.runpod.ssh import get_ready_connection
 from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
 
 
@@ -212,20 +213,17 @@ class RunpodProvider(Provider):
         """Convert the current Pod response into instance details."""
 
         status = POD_STATUS_MAP[pod.status]
-        ssh_command = None
-        ssh_endpoint = pod.ssh.direct or pod.ssh.proxy
-        if status == InstanceStatus.RUNNING and (
-            pod.runtime is None or not pod.runtime.gpus or pod.runtime.uptime is None or ssh_endpoint is None
-        ):
-            status = InstanceStatus.PROVISIONING
+        ssh = None
         if status == InstanceStatus.RUNNING:
-            ssh_command = ssh_endpoint.command
+            ssh = get_ready_connection(pod)
+            if ssh is None:
+                status = InstanceStatus.PROVISIONING
 
         return Instance(
             id=pod.id,
             status=status,
             region=pod.dataCenterId,
-            ssh_command=ssh_command,
+            ssh=ssh,
             gpu=pod.gpu.id if pod.gpu is not None else None,
             hourly_price=pod.cost,
             created_at=pod.createdAt,

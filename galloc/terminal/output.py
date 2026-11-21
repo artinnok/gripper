@@ -6,7 +6,6 @@ import click
 
 from galloc.core.pricing import calculate_cost
 from galloc.core.schemas import GPU, Creation
-from galloc.core.ssh_keys import format_ssh_command
 from galloc.core.ttl import format_ttl
 from galloc.providers.schemas import Instance
 
@@ -36,7 +35,7 @@ def print_created_gpu(gpu: GPU, output: str, instance: Instance, public_key_path
         click.echo()
         click.echo(f"{'NAME':12}  {'STATUS':10}  {'REGION':12}  TTL ENDS (UTC)")
         click.echo(f"{gpu.name:12}  {instance.status:10}  {instance.region or '-':12}  {gpu.expires_at:%Y-%m-%d %H:%M}")
-        click.echo(f"\nSSH     {format_ssh_command(instance.ssh_command, public_key_path)}")
+        click.echo(f"\nSSH     {instance.format_ssh_command(public_key_path)}")
     click.echo(f"Delete  galloc rm {gpu.name}", err=True)
 
 
@@ -65,7 +64,7 @@ def print_gpu(gpu: GPU, output: str, instance: Instance, public_key_path: Path |
         ("GPU", instance.gpu or "-"),
         ("Region", instance.region or "-"),
         ("Created at", instance.created_at.isoformat() if instance.created_at else "-"),
-        ("SSH", format_ssh_command(instance.ssh_command, public_key_path) or "-"),
+        ("SSH", instance.format_ssh_command(public_key_path) or "-"),
     ]
     for label, value in field_list:
         click.echo(f"{label}: {value}")

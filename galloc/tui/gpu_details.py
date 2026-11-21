@@ -4,7 +4,6 @@ from pathlib import Path
 from textual.markup import escape
 
 from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import format_ssh_command
 from galloc.providers.schemas import Instance, InstanceStatus
 from galloc.tui.theme import AMBER_THEME, MUTED_COLOR
 
@@ -22,7 +21,7 @@ STATUS_COLOR_MAP = {
 def format_gpu(gpu: GPU, instance: Instance, public_key_path: Path | None) -> str:
     """Show a selected GPU's hardware, price, deadline, and connection in the detail column."""
 
-    ssh_command = format_ssh_command(instance.ssh_command, public_key_path)
+    ssh_command = instance.format_ssh_command(public_key_path)
     return (
         f"[b $primary]{gpu.name}[/]\n"
         f"{escape(instance.gpu or '-')}\n"

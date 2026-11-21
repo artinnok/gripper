@@ -1,7 +1,8 @@
-import shlex
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
+
+from pydantic import ValidationError
 
 from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
 from galloc.api_clients.vast.client import VastAPIClient
@@ -11,6 +12,7 @@ from galloc.core.ssh_keys import SSHKey, parse_public_key
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable, InvalidGPU, InvalidRegion
 from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
+from galloc.providers.ssh import SSHConnection
 
 
 OFFER_LIMIT = 100
@@ -79,7 +81,6 @@ class VastProvider(Provider):
             id=instance_id,
             status=InstanceStatus.PROVISIONING,
             region=region,
-            ssh_command=None,
             gpu=self._prepared_offer.gpu_name,
             hourly_price=self._prepared_offer.dph_base,
             created_at=datetime.now(UTC),
@@ -238,18 +239,29 @@ def _to_instance(instance: VastInstance) -> Instance:
     if status == InstanceStatus.STOPPED and instance.intended_status == "running":
         status = InstanceStatus.PROVISIONING
 
-    ssh_command = None
+    ssh = None
     if status == InstanceStatus.RUNNING:
-        if instance.ssh_host and instance.ssh_port:
-            ssh_command = f"ssh {shlex.quote('root@' + instance.ssh_host)} -p {instance.ssh_port}"
-        else:
+        ssh = _ssh_connection(instance)
+        if ssh is None:
             status = InstanceStatus.PROVISIONING
+
     return Instance(
         id=str(instance.id),
         status=status,
         region=_country(instance.geolocation),
-        ssh_command=ssh_command,
+        ssh=ssh,
         gpu=instance.gpu_name,
         hourly_price=instance.dph_total,
         created_at=instance.start_date,
     )
+
+
+def _ssh_connection(instance: VastInstance) -> SSHConnection | None:
+    """Return an endpoint once Vast publishes a usable host and mapped port."""
+
+    if not instance.ssh_host or not instance.ssh_port:
+        return None
+    try:
+        return SSHConnection(destination=f"root@{instance.ssh_host}", port=instance.ssh_port)
+    except ValidationError:
+        return None

@@ -179,10 +179,11 @@ def test_get_maps_actual_status(make_runpod_client, pod_data, remote_status, exp
         assert instance.ssh_command is None
 
 
-def test_get_uses_proxy_when_direct_ssh_is_unavailable(make_runpod_client, pod_data):
+@pytest.mark.parametrize("direct", [None, {"command": "ssh host extra"}])
+def test_get_uses_proxy_when_direct_ssh_is_unavailable(make_runpod_client, pod_data, direct):
     """Expose the supplied proxy command when no direct mapping is available."""
 
-    pod_data["ssh"]["direct"] = None
+    pod_data["ssh"]["direct"] = direct
 
     def handler(request):
         """Return a running Pod without a published public port."""

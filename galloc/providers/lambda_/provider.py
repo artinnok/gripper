@@ -12,6 +12,7 @@ from galloc.exceptions import InvalidSSHKey
 from galloc.providers.base import Provider
 from galloc.providers.exceptions import CreationRejected, GPUUnavailable, InvalidGPU
 from galloc.providers.schemas import GPUModel, Instance, InstanceStatus, Region
+from galloc.providers.ssh import SSHConnection
 
 
 INSTANCE_NOT_FOUND = "global/object-does-not-exist"
@@ -113,7 +114,6 @@ class LambdaProvider(Provider):
             id=instance_id,
             status=InstanceStatus.PROVISIONING,
             region=region,
-            ssh_command=None,
             gpu=self._instance_type.description,
             hourly_price=self._instance_type.price_cents_per_hour / 100,
             created_at=None,
@@ -133,17 +133,17 @@ class LambdaProvider(Provider):
         if status == InstanceStatus.DELETED:
             return None
 
-        ssh_command = None
+        ssh = None
         if status == InstanceStatus.RUNNING and (instance.ip is None or instance.first_healthy is None):
             status = InstanceStatus.PROVISIONING
 
         if status == InstanceStatus.RUNNING:
-            ssh_command = f"ssh ubuntu@{instance.ip}"
+            ssh = SSHConnection(destination=f"ubuntu@{instance.ip}")
 
         return Instance(
             id=instance.id,
             status=status,
-            ssh_command=ssh_command,
+            ssh=ssh,
             region=instance.region.name,
             gpu=instance.instance_type.description,
             hourly_price=instance.instance_type.price_cents_per_hour / 100,

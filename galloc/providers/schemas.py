@@ -1,8 +1,12 @@
+import shlex
 from datetime import datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, computed_field
+
+from galloc.providers.ssh import SSHConnection
 
 
 class ProviderName(StrEnum):
@@ -30,10 +34,24 @@ class Instance(BaseModel):
     id: str
     status: InstanceStatus
     region: str | None
-    ssh_command: str | None
+    ssh: SSHConnection | None = Field(default=None, exclude=True)
     gpu: str | None
     hourly_price: float
     created_at: datetime | None
+
+    def format_ssh_command(self, public_key_path: Path | None = None) -> str | None:
+        """Quote the connection arguments for a command that can be pasted into a shell."""
+
+        if self.ssh is None:
+            return None
+        return shlex.join(self.ssh.build_argument_list(public_key_path))
+
+    @computed_field
+    @property
+    def ssh_command(self) -> str | None:
+        """Include the provider's SSH command in CLI JSON output."""
+
+        return self.format_ssh_command()
 
 
 class Region(BaseModel):

@@ -9,6 +9,7 @@ from galloc.core.storage import open_database
 from galloc.core.validators import prepare_creation
 from galloc.providers.base import Provider
 from galloc.providers.schemas import Instance, InstanceStatus
+from galloc.providers.ssh import SSHConnection
 
 
 @pytest.fixture
@@ -34,7 +35,7 @@ def instance():
         id="instance-1",
         status=InstanceStatus.RUNNING,
         region="test",
-        ssh_command="ssh root@example.test",
+        ssh=SSHConnection(destination="root@example.test"),
         gpu="H200",
         hourly_price=3,
         created_at=datetime(2026, 1, 1, 12, tzinfo=UTC),
