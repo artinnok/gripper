@@ -3,10 +3,10 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
-from galloc.core import services, storage
-from galloc.core.schemas import GPU
-from galloc.providers.vast.provider import VastProvider
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from gripper.core import services, storage
+from gripper.core.schemas import GPU
+from gripper.providers.vast.provider import VastProvider
 
 
 @pytest.mark.parametrize(

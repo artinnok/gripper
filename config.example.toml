@@ -1,4 +1,4 @@
-# Save as ~/.galloc/config.toml, or run galloc to configure it interactively.
+# Save as ~/.gripper/config.toml, or run gripper to configure it interactively.
 [defaults]
 provider = "runpod"
 disk_gb = 50

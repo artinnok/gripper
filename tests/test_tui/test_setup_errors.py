@@ -5,11 +5,11 @@ import threading
 import httpx
 from textual.widgets import Input, OptionList, Static
 
-from galloc.core.ssh_keys import read_public_key
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.setup import SetupScreen, SetupStep
+from gripper.core.ssh_keys import read_public_key
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.setup import SetupScreen, SetupStep
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_setup import DATA_CENTER_RESPONSE
@@ -53,7 +53,7 @@ def test_invalid_disk_stays_editable_before_registration(settings, config_path, 
         assert "80 GB" in progress
         assert progress.endswith("SSH key")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_invalid_custom_key_keeps_path_editable(settings, config_path, runpod_http, home):
@@ -80,7 +80,7 @@ def test_invalid_custom_key_keeps_path_editable(settings, config_path, runpod_ht
         assert screen.query_one(OptionList).has_focus
         await pilot.press("escape")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert not config_path.exists()
     assert runpod_http.call_count == 1
 
@@ -88,7 +88,7 @@ def test_invalid_custom_key_keeps_path_editable(settings, config_path, runpod_ht
 def test_generated_key_survives_registration_retry(settings, config_path, runpod_http, home):
     """Reuse a generated pair after missing permissions instead of trying to overwrite it."""
 
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
     public_path = private_path.with_suffix(".pub")
     runpod_http.side_effect = [httpx.Response(200, json=DATA_CENTER_RESPONSE), httpx.Response(403)]
 
@@ -116,13 +116,13 @@ def test_generated_key_survives_registration_retry(settings, config_path, runpod
         assert json.loads(runpod_http.call_args.args[0].content) == {"keys": [OTHER_SSH_PUBLIC_KEY, public_key]}
         assert b"PRIVATE KEY" not in runpod_http.call_args.args[0].content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_generation_preserves_existing_private_key(settings, config_path, runpod_http, home):
     """Never replace an existing private key even when its public file is missing."""
 
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
     private_path.parent.mkdir()
     private_path.write_text("existing key")
     runpod_http.side_effect = [httpx.Response(200, json=DATA_CENTER_RESPONSE)]
@@ -136,7 +136,7 @@ def test_generation_preserves_existing_private_key(settings, config_path, runpod
         assert "already exist" in pilot.app.screen.query_one(Message).content
         assert pilot.app.screen.query_one(OptionList).has_focus
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert private_path.read_text() == "existing key"
     assert not config_path.exists()
     assert runpod_http.call_count == 1
@@ -182,5 +182,5 @@ def test_exit_during_registration_waits_for_setup(settings, config_path, runpod_
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert config_path.exists()
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert sum(call.args[0].method == "PUT" for call in runpod_http.call_args_list) == 1

@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from galloc.main import cli
+from gripper.main import cli
 from tests.conftest import SSH_FINGERPRINT, SSH_PUBLIC_KEY
 
 

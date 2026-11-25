@@ -1,18 +1,18 @@
 import pytest
 
-from galloc.core.ssh_keys import generate_key_pair, read_public_key
-from galloc.exceptions import SSHKeyGenerationFailed
+from gripper.core.ssh_keys import generate_key_pair, read_public_key
+from gripper.exceptions import SSHKeyGenerationFailed
 
 
 def test_generated_key_pair_is_valid_and_never_replaced(tmp_path):
     """Create a usable public key and refuse to overwrite an existing pair."""
 
-    private_key_path = tmp_path / ".ssh" / "galloc_ed25519"
+    private_key_path = tmp_path / ".ssh" / "gripper_ed25519"
 
     public_key_path = generate_key_pair(private_key_path)
 
-    assert public_key_path == tmp_path / ".ssh" / "galloc_ed25519.pub"
-    assert read_public_key(public_key_path).comment == "galloc"
+    assert public_key_path == tmp_path / ".ssh" / "gripper_ed25519.pub"
+    assert read_public_key(public_key_path).comment == "gripper"
     private_key = private_key_path.read_text()
 
     with pytest.raises(SSHKeyGenerationFailed):

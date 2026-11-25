@@ -4,8 +4,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
-from galloc.api_clients.runpod.client import RunpodAPIClient
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
+from gripper.api_clients.runpod.client import RunpodAPIClient
 from tests.conftest import make_gpu_data
 
 

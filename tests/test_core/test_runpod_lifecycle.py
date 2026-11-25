@@ -4,14 +4,14 @@ from uuid import uuid4
 
 import httpx
 
-from galloc.core import services, storage
-from galloc.core.validators import (
+from gripper.core import services, storage
+from gripper.core.validators import (
     prepare_creation,
     prepare_extension,
     prepare_instance_operation,
 )
-from galloc.providers.runpod.provider import RunpodProvider
-from galloc.providers.schemas import InstanceStatus
+from gripper.providers.runpod.provider import RunpodProvider
+from gripper.providers.schemas import InstanceStatus
 from tests.conftest import make_gpu_data
 
 
@@ -19,7 +19,7 @@ def test_runpod_lifecycle_through_all_layers(tmp_path, make_runpod_client, pod_d
     """Exercise the real application layers, replacing only Runpod's HTTP responses."""
 
     gpu_id = uuid4()
-    pod_data["name"] = f"galloc-{gpu_id}"
+    pod_data["name"] = f"gripper-{gpu_id}"
     pod_path = f"/v2/pods/{pod_data['id']}"
     exchange_list = [
         (
@@ -74,7 +74,7 @@ def test_runpod_lifecycle_through_all_layers(tmp_path, make_runpod_client, pod_d
     assert instance.gpu == "NVIDIA H200"
     _, _, creation_request = request_list
     payload = json.loads(creation_request.content)
-    assert payload["name"] == f"galloc-{gpu_id}"
+    assert payload["name"] == f"gripper-{gpu_id}"
     assert payload["gpu"] == {"id": "NVIDIA H200", "count": 1}
 
     with storage.open_database(database_path) as connection:

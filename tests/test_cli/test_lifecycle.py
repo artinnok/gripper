@@ -3,9 +3,9 @@ from datetime import timedelta
 
 import httpx
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.main import cli
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.main import cli
 from tests.conftest import make_gpu_data
 from tests.test_cli.conftest import CREATION_TIME
 
@@ -55,11 +55,11 @@ def test_lifecycle_through_cli(runner, runpod_http, database_path, pod_data):
     assert json.loads(result.stdout)["status"] == "running"
     assert json.loads(result.stdout)["instance"]["gpu"] == "NVIDIA H200"
     assert gpu.expires_at - CREATION_TIME == timedelta(minutes=30)
-    assert f"galloc rm {gpu_name}" in result.stderr
+    assert f"gripper rm {gpu_name}" in result.stderr
 
     first_call, second_call, creation_call, readiness_call = runpod_http.call_args_list
     (creation_request,) = creation_call.args
-    assert json.loads(creation_request.content)["name"] == f"galloc-{gpu_id}"
+    assert json.loads(creation_request.content)["name"] == f"gripper-{gpu_id}"
     result = runner.invoke(cli, ["ls", "--output", "json"])
     assert result.exit_code == 0
     (listed,) = json.loads(result.stdout)

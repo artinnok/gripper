@@ -7,10 +7,10 @@ from pydantic import SecretStr
 from textual.events import Key
 from textual.widgets import DataTable, Static
 
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.ssh_key.list import SSHKeyListScreen
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.ssh_key.list import SSHKeyListScreen
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_FINGERPRINT, SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
@@ -44,7 +44,7 @@ def test_key_list_has_selected_details_and_refreshes_from_provider(settings, con
         await pilot.press("escape")
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_key_removal_requires_confirmation_and_keeps_local_files(settings, config_path, registered_key_list, tmp_path):
@@ -68,7 +68,7 @@ def test_key_removal_requires_confirmation_and_keeps_local_files(settings, confi
         await settle(pilot)
         assert pilot.app.screen.query_one(DataTable).row_count == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert registered_key_list == [OTHER_SSH_PUBLIC_KEY]
     assert key_path.read_text() == SSH_PUBLIC_KEY
 
@@ -112,7 +112,7 @@ def test_keys_of_every_provider_are_listed_and_removed_from_their_own(
         assert table.row_count == 1
         assert table.get_row_at(0) == ["laptop", "runpod", SSH_FINGERPRINT]
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert registered_key_list == [SSH_PUBLIC_KEY]
 
 
@@ -136,7 +136,7 @@ def test_failed_provider_keeps_the_other_providers_keys(settings, config_path, r
         assert SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
         assert "vast" in message and "500" in message
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_failed_key_refresh_clears_stale_rows_and_can_retry(settings, config_path, runpod_http):
@@ -164,7 +164,7 @@ def test_failed_key_refresh_clears_stale_rows_and_can_retry(settings, config_pat
         await settle(pilot)
         assert "No SSH keys registered" in screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.mark.parametrize("key", ["ctrl+c", "ctrl+q"])
@@ -184,7 +184,7 @@ def test_quit_from_nested_key_screen_uses_gpu_exit_confirmation(settings, config
         await pilot.press("escape")
         assert pilot.app.return_code is None
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_queued_enter_events_remove_key_once_and_keep_list_open(
@@ -228,5 +228,5 @@ def test_queued_enter_events_remove_key_once_and_keep_list_open(
         assert screen.query_one(DataTable).row_count == 1
         assert OTHER_SSH_PUBLIC_KEY in screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert registered_key_list == [OTHER_SSH_PUBLIC_KEY]

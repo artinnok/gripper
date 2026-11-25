@@ -2,7 +2,7 @@ from io import StringIO
 
 import pytest
 
-from galloc.terminal.wait import startup_spinner
+from gripper.terminal.wait import startup_spinner
 from tests.test_cli.conftest import TerminalInput
 
 

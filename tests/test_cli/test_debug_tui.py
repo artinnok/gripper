@@ -6,7 +6,7 @@ import click
 import pytest
 from textual.widgets import Static
 
-from galloc.main import _configure_logging, cli
+from gripper.main import _configure_logging, cli
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
 
@@ -20,7 +20,7 @@ def test_tui_diagnostics_stay_in_file_during_navigation(
     write_config(defaults={"debug": mode == "config"})
     runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
     log_path = config_path.with_name("debug.log")
-    logger = logging.getLogger("galloc")
+    logger = logging.getLogger("gripper")
     original_handlers = logger.handlers[:]
     original_level, original_propagate = logger.level, logger.propagate
 
@@ -48,7 +48,7 @@ def test_tui_diagnostics_stay_in_file_during_navigation(
 
         run_app(app, scenario)
 
-    monkeypatch.setattr("galloc.main.GallocApp.run", run_headless)
+    monkeypatch.setattr("gripper.main.GripperApp.run", run_headless)
     with runner.isolation() as (_, stderr, output):
         monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
@@ -75,7 +75,7 @@ def test_file_logging_closes_on_errors_and_interrupts(tmp_path, failure, capsys)
     """Close the log file and restore existing logger state even when the command is interrupted."""
 
     log_path = tmp_path / "debug.log"
-    logger = logging.getLogger("galloc")
+    logger = logging.getLogger("gripper")
     original_handlers = logger.handlers[:]
     original_level, original_propagate = logger.level, logger.propagate
 

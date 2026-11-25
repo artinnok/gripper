@@ -5,10 +5,10 @@ import httpx
 import pytest
 from textual.widgets import DataTable, Static
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.tui.app import GallocApp
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.tui.app import GripperApp
+from gripper.tui.message import Message
 from tests.test_tui.conftest import run_app, settle
 
 
@@ -40,7 +40,7 @@ def test_ssh_opens_the_selected_gpu(settings, config_path, runpod_http, gpu, pod
         await pilot.press("up")
         assert "gpu-1" in info.content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert runpod_http.call_count == 2
 
 
@@ -65,7 +65,7 @@ def test_ssh_requires_a_selected_gpu_with_a_connection(settings, config_path, ru
         await pilot.press("s")
         ssh_session.assert_not_awaited()
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.mark.parametrize("key", ["e", "d", "q"])
@@ -84,7 +84,7 @@ def test_ssh_does_not_interrupt_questions(settings, config_path, runpod_http, gp
         ssh_session.assert_not_awaited()
         assert pilot.app.screen.pending_action == question
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.mark.parametrize("outcome, reason", [(255, "status 255"), (FileNotFoundError("ssh missing"), "ssh missing")])
@@ -106,14 +106,14 @@ def test_ssh_failure_returns_to_the_list(
         await pilot.press("k")
         assert pilot.app.screen is not pilot.app.gpu_screen
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_ttl_runs_during_ssh(settings, config_path, runpod_http, gpu, pod_data, ssh_session, monkeypatch):
     """Enforce a deadline while the interactive SSH session still owns the terminal."""
 
     config_path.touch()
-    monkeypatch.setattr("galloc.tui.app.TTL_CHECK_INTERVAL", 0.05)
+    monkeypatch.setattr("gripper.tui.app.TTL_CHECK_INTERVAL", 0.05)
 
     def serve(request):
         """Confirm the deletion while the SSH client is waiting."""
@@ -145,5 +145,5 @@ def test_ttl_runs_during_ssh(settings, config_path, runpod_http, gpu, pod_data, 
         ssh_session.assert_awaited_once()
         assert pilot.app.screen.query_one(DataTable).row_count == 0
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert sum(call.args[0].method == "DELETE" for call in runpod_http.call_args_list) == 1

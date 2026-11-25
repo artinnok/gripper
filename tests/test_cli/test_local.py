@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from galloc.core import storage
-from galloc.main import cli
+from gripper.core import storage
+from gripper.main import cli
 
 
 @pytest.mark.parametrize("token, configured", [("test-token", True), ("", False)])
@@ -48,7 +48,7 @@ def test_unresolved_creation_requires_provider_inspection(runner, write_config, 
 
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert f"Check galloc-{gpu.id} in the runpod console." in result.stderr
+    assert f"Search for {gpu.id} in the runpod console." in result.stderr
     result = runner.invoke(cli, ["ls", "--output", "json"])
     assert result.exit_code == 0
     assert json.loads(result.stdout) == []

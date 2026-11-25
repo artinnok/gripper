@@ -1,11 +1,11 @@
 import httpx
 from textual.widgets import DataTable, Input, OptionList, Static
 
-from galloc.core.ssh_keys import read_public_key
-from galloc.tui.app import GallocApp
-from galloc.tui.message import Message
-from galloc.tui.ssh_key.add import SSHKeyAddScreen
-from galloc.tui.ssh_key.list import SSHKeyListScreen
+from gripper.core.ssh_keys import read_public_key
+from gripper.tui.app import GripperApp
+from gripper.tui.message import Message
+from gripper.tui.ssh_key.add import SSHKeyAddScreen
+from gripper.tui.ssh_key.list import SSHKeyListScreen
 from tests.conftest import SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
@@ -36,7 +36,7 @@ def test_local_key_selection_previews_and_registers(settings, config_path, regis
         assert isinstance(pilot.app.screen, SSHKeyListScreen)
         assert pilot.app.screen.query_one(DataTable).row_count == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert registered_key_list == [SSH_PUBLIC_KEY]
 
 
@@ -69,7 +69,7 @@ def test_custom_path_is_labelled_on_left_and_validated(settings, config_path, re
         await settle(pilot)
         assert isinstance(pilot.app.screen, SSHKeyListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert registered_key_list == [SSH_PUBLIC_KEY]
 
 
@@ -78,7 +78,7 @@ def test_generation_retries_registration_without_replacing_key(settings, config_
 
     config_path.touch()
     runpod_http.side_effect = [httpx.Response(200, json={"keys": []}), httpx.Response(403)]
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
     public_path = private_path.with_suffix(".pub")
 
     async def scenario(pilot):
@@ -106,14 +106,14 @@ def test_generation_retries_registration_without_replacing_key(settings, config_
         assert private_path.read_bytes() == private_contents
         assert b"PRIVATE KEY" not in runpod_http.call_args_list[-2].args[0].content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_generation_preserves_existing_files(settings, config_path, registered_key_list, home):
     """Reject a conflicting generation path without writing files or provider registrations."""
 
     config_path.touch()
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
     private_path.parent.mkdir()
     private_path.write_text("existing private key")
 
@@ -128,6 +128,6 @@ def test_generation_preserves_existing_files(settings, config_path, registered_k
         await pilot.press("escape", "escape")
         assert isinstance(pilot.app.screen, SSHKeyListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert private_path.read_text() == "existing private key"
     assert registered_key_list == []

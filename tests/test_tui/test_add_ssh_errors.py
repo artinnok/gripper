@@ -5,12 +5,12 @@ import threading
 import httpx
 from textual.widgets import Input, OptionList, Static
 
-from galloc.tui.add import AddScreen
-from galloc.tui.add_catalog import GPUCatalog
-from galloc.tui.add_steps import AddStep
-from galloc.tui.app import GallocApp
-from galloc.tui.message import Message
-from galloc.tui.ssh_key.add import SSHKeyAddScreen
+from gripper.tui.add import AddScreen
+from gripper.tui.add_catalog import GPUCatalog
+from gripper.tui.add_steps import AddStep
+from gripper.tui.app import GripperApp
+from gripper.tui.message import Message
+from gripper.tui.ssh_key.add import SSHKeyAddScreen
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
 
@@ -51,7 +51,7 @@ def test_failed_key_lookup_stops_creation_and_can_be_retried(settings, config_pa
         assert isinstance(pilot.app.screen, AddScreen)
         assert pilot.app.screen.step == AddStep.GPU
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
 
@@ -63,7 +63,7 @@ def test_registration_failure_preserves_generated_pair_and_allows_retry(
     config_path.touch()
     denied = True
     registered_key_list = []
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
 
     def handler(request):
         """Fail the first key upload and accept a later retry without creating any GPU."""
@@ -101,7 +101,7 @@ def test_registration_failure_preserves_generated_pair_and_allows_retry(
         assert private_path.read_bytes() == private_contents
         assert len(registered_key_list) == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_leaving_during_key_lookup_ignores_its_late_answer(settings, config_path, runpod_http, pod_data):
@@ -146,5 +146,5 @@ def test_leaving_during_key_lookup_ignores_its_late_answer(settings, config_path
         assert pilot.app.screen.query_one(GPUCatalog).display
         assert not pilot.app.screen.query_one("#choice", OptionList).disabled
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)

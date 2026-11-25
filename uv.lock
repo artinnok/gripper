@@ -51,7 +51,7 @@ wheels = [
 ]
 
 [[package]]
-name = "galloc"
+name = "gripper"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

@@ -1,8 +1,8 @@
 import httpx
 import pytest
 
-from galloc.providers.exceptions import GPUUnavailable
-from galloc.providers.runpod.provider import RunpodProvider
+from gripper.providers.exceptions import GPUUnavailable
+from gripper.providers.runpod.provider import RunpodProvider
 from tests.conftest import make_gpu_data
 
 

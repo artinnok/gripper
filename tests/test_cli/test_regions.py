@@ -3,8 +3,8 @@ import json
 import httpx
 import pytest
 
-from galloc.core import storage
-from galloc.main import cli
+from gripper.core import storage
+from gripper.main import cli
 from tests.conftest import make_gpu_data
 
 
@@ -130,7 +130,7 @@ def test_unknown_region_does_not_create_or_save(runner, runpod_http, database_pa
 
     assert result.exit_code == 1
     assert "Unknown Runpod region" in result.stderr
-    assert "galloc regions --provider runpod" in result.stderr
+    assert "gripper regions --provider runpod" in result.stderr
     for arguments in runpod_http.call_args_list:
         (request,) = arguments.args
         assert request.method == "GET"

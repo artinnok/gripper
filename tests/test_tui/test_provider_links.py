@@ -4,7 +4,7 @@ import httpx
 import pytest
 from textual.widgets import Input, Link
 
-from galloc.tui.app import GallocApp
+from gripper.tui.app import GripperApp
 from tests.test_tui.conftest import run_app, settle
 
 
@@ -22,7 +22,7 @@ def test_provider_key_link_opens_only_on_request(settings, config_path, first_ru
 
     if not first_run:
         config_path.touch()
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
     app.open_url = Mock()
 
     async def scenario(pilot):
@@ -58,7 +58,7 @@ def test_lambda_key_onboarding(settings, config_path, lambda_http, local_key):
         httpx.Response(200, json={"data": []}),
         httpx.Response(200, json={"data": {"id": "id1", "name": "key1", "public_key": local_key.public_key}}),
     ]
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario(pilot):
         """Complete the Lambda first-run flow through the real configuration file."""

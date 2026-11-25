@@ -6,9 +6,9 @@ import pytest
 from textual.events import MouseScrollDown, MouseScrollUp
 from textual.widgets import DataTable, Input, OptionList, Static
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.tui.app import GallocApp
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.tui.app import GripperApp
 from tests.conftest import SSH_PUBLIC_KEY, make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 
@@ -86,7 +86,7 @@ def test_long_picker_scrolls_within_the_screen(
         else:
             assert screen.selected_region.id == last_label
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.fixture
@@ -142,7 +142,7 @@ def test_local_keys_scroll_to_the_final_action(settings, config_path, runpod_htt
             assert choice.highlighted == len(local_key_list) - 1
             assert "key-31.pub" in choice.render_line(choice.content_size.height - 3).text
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
 
@@ -197,7 +197,7 @@ def test_entity_tables_scroll_with_fixed_headers(
         assert table.cursor_row == 31
         assert last_label in table.render_line(table.content_size.height - 1).text
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_provider_choice_fits_a_small_screen(settings, config_path):
@@ -214,7 +214,7 @@ def test_provider_choice_fits_a_small_screen(settings, config_path):
         await pilot.press("enter")
         assert screen.query_one(Input).has_focus
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_limit_choices_fit_a_small_screen(settings, config_path, long_catalog):
@@ -238,7 +238,7 @@ def test_limit_choices_fit_a_small_screen(settings, config_path, long_catalog):
         assert screen.step == "budget"
         assert screen.query_one("#limit", Input).has_focus
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 async def check_list_scrolling(pilot, widget: OptionList | DataTable, last_label: str, control: str) -> None:

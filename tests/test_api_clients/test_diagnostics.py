@@ -8,7 +8,7 @@ from threading import Barrier
 import httpx
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
 
 
 @pytest.mark.parametrize("fixture_name", ["make_runpod_client", "make_vast_client"])
@@ -34,7 +34,7 @@ def test_http_diagnostics_include_payloads_and_mask_secrets(request, fixture_nam
             },
         )
 
-    with caplog.at_level(logging.DEBUG, logger="galloc"), pytest.raises(APIRequestFailed):
+    with caplog.at_level(logging.DEBUG, logger="gripper"), pytest.raises(APIRequestFailed):
         make_client(handler)._request(
             "POST", "offers", json=payload, params={"limit": "100", "api_key": "query-secret"}
         )
@@ -69,7 +69,7 @@ def test_transport_failure_is_paired_with_the_request(request, fixture_name, cap
         token = request.headers["authorization"].removeprefix("Bearer ")
         raise httpx.ReadTimeout(f"Timed out with {token}", request=request)
 
-    with caplog.at_level(logging.DEBUG, logger="galloc"), pytest.raises(APIRequestFailed):
+    with caplog.at_level(logging.DEBUG, logger="gripper"), pytest.raises(APIRequestFailed):
         request.getfixturevalue(fixture_name)(handler)._request("POST", "offers", json={"disk": 50})
 
     request_id, failure_id = re.findall(r"\[([a-f0-9]{8})\] (?:REQUEST|FAILED)", caplog.text)
@@ -88,7 +88,7 @@ def test_invalid_responses_are_logged_before_schema_validation(make_vast_client,
 
         return httpx.Response(200, text=body)
 
-    with caplog.at_level(logging.DEBUG, logger="galloc"), pytest.raises(InvalidAPIResponse):
+    with caplog.at_level(logging.DEBUG, logger="gripper"), pytest.raises(InvalidAPIResponse):
         make_vast_client(handler).get_instance("5678")
     assert "HTTP 200" in caplog.text
     assert "schema-debug-value" in caplog.text or "gateway failure" in caplog.text
@@ -107,7 +107,7 @@ def test_parallel_requests_have_distinct_matching_ids(make_vast_client, caplog):
         return httpx.Response(200, json={"instances": None})
 
     client = make_vast_client(handler)
-    with caplog.at_level(logging.DEBUG, logger="galloc"), ThreadPoolExecutor(max_workers=2) as executor:
+    with caplog.at_level(logging.DEBUG, logger="gripper"), ThreadPoolExecutor(max_workers=2) as executor:
         assert list(executor.map(client.get_instance, ["123", "456"])) == [None, None]
 
     request_id_list = re.findall(r"\[([a-f0-9]{8})\] REQUEST", caplog.text)
@@ -124,7 +124,7 @@ def test_debug_off_emits_no_request_data(make_vast_client, caplog):
 
         return httpx.Response(200, json={"instances": None, "extra": "debug-only-body"})
 
-    with caplog.at_level(logging.WARNING, logger="galloc"):
+    with caplog.at_level(logging.WARNING, logger="gripper"):
         assert make_vast_client(handler).get_instance("5678") is None
     assert not caplog.records
 
@@ -161,7 +161,7 @@ def test_streamed_response_preserves_results_and_failures(make_vast_client, capl
 
         return httpx.Response(200, stream=stream)
 
-    with caplog.at_level(logging.DEBUG if debug else logging.WARNING, logger="galloc"):
+    with caplog.at_level(logging.DEBUG if debug else logging.WARNING, logger="gripper"):
         client = make_vast_client(handler)
         if interrupted:
             with pytest.raises(APIRequestFailed, match="Vast.ai request failed"):

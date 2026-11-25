@@ -3,9 +3,9 @@ import json
 import httpx
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed
-from galloc.core.ssh_keys import parse_public_key
-from galloc.providers.vast.provider import VastProvider
+from gripper.api_clients.exceptions import APIRequestFailed
+from gripper.core.ssh_keys import parse_public_key
+from gripper.providers.vast.provider import VastProvider
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_FINGERPRINT, SSH_PUBLIC_KEY
 
 

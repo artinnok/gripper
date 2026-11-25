@@ -5,8 +5,8 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
-from galloc.api_clients.vast.client import VastAPIClient
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse, MissingCredentials
+from gripper.api_clients.vast.client import VastAPIClient
 
 
 def test_create_uses_exact_offer_and_returns_contract_id(make_vast_client):
@@ -36,7 +36,7 @@ def test_refusals_are_descriptive_and_redacted(make_vast_client, caplog, status)
 
         return httpx.Response(status, json={"success": False, "msg": "Refused vast-token"})
 
-    with caplog.at_level(logging.DEBUG, logger="galloc"), pytest.raises(APIRequestFailed) as raised:
+    with caplog.at_level(logging.DEBUG, logger="gripper"), pytest.raises(APIRequestFailed) as raised:
         make_vast_client(handler).delete_instance("5678")
     assert raised.value.status_code == status
     assert "Refused [REDACTED]" in str(raised.value)

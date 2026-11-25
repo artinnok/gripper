@@ -6,11 +6,11 @@ import pytest
 from pydantic import SecretStr
 from textual.widgets import Input, OptionList, Static
 
-from galloc.tui.add import AddScreen
-from galloc.tui.add_catalog import GPUCatalog
-from galloc.tui.add_steps import AddStep
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
+from gripper.tui.add import AddScreen
+from gripper.tui.add_catalog import GPUCatalog
+from gripper.tui.add_steps import AddStep
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
 from tests.conftest import make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
@@ -92,7 +92,7 @@ def test_search_filters_names_and_providers_without_requests(
         await pilot.press("escape")
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_queued_selection_keeps_the_offer_after_the_catalog_changes(settings, config_path, search_catalog):
@@ -112,7 +112,7 @@ def test_queued_selection_keeps_the_offer_after_the_catalog_changes(settings, co
         assert screen.step == AddStep.REGION
         assert (screen.selected_provider, screen.selected_gpu_model) == (provider, model)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_arrows_leave_search_and_select_the_highlighted_gpu(settings, config_path, search_catalog):
@@ -138,7 +138,7 @@ def test_arrows_leave_search_and_select_the_highlighted_gpu(settings, config_pat
         assert screen.step == AddStep.REGION
         assert (screen.selected_provider, screen.selected_gpu_model.id) == ("vast", "9999")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_arrows_on_empty_search_keep_the_picker_usable(settings, config_path, search_catalog):
@@ -156,7 +156,7 @@ def test_arrows_on_empty_search_keep_the_picker_usable(settings, config_path, se
         assert screen.query_one("#choice", OptionList).has_focus
         assert screen.query_one("#choice", OptionList).option_count == 2
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.mark.parametrize(
@@ -190,7 +190,7 @@ def test_filtered_selection_uses_visible_offer_and_keeps_limit_input_separate(
         assert screen.query_one("#search", Input).value == "h200 vast"
         assert screen.query_one("#choice", OptionList).option_count == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_closing_search_keeps_the_found_gpu_under_the_cursor(settings, config_path, search_catalog):
@@ -208,7 +208,7 @@ def test_closing_search_keeps_the_found_gpu_under_the_cursor(settings, config_pa
         await settle(pilot)
         assert (screen.selected_provider, screen.selected_gpu_model.id) == ("vast", "9999")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_refresh_keeps_search_and_filtered_list_scrolls(settings, config_path, search_catalog):
@@ -237,7 +237,7 @@ def test_refresh_keeps_search_and_filtered_list_scrolls(settings, config_path, s
         assert choice.region.bottom <= screen.query_one("#keys").region.y
         assert screen.scroll_y == 0
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_late_catalog_answer_preserves_search_text_and_focus(
@@ -275,4 +275,4 @@ def test_late_catalog_answer_preserves_search_text_and_focus(
         await pilot.press("home", "delete", "h")
         assert prompt.value == "h200" and prompt.cursor_position == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)

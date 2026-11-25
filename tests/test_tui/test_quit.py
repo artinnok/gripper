@@ -2,8 +2,8 @@ import httpx
 import pytest
 from textual.widgets import Static
 
-from galloc.core import storage
-from galloc.tui.app import GallocApp
+from gripper.core import storage
+from gripper.tui.app import GripperApp
 from tests.test_tui.conftest import run_app
 
 
@@ -15,7 +15,7 @@ def test_quit_can_be_cancelled_then_confirmed_without_deleting_gpus(
 
     config_path.touch()
     runpod_http.side_effect = [httpx.Response(200, json=pod_data)]
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario(pilot):
         """Cancel the right-column warning, then open it again and confirm."""
@@ -53,7 +53,7 @@ def test_second_q_confirms_the_exit(settings, config_path, runpod_http, gpu, pod
 
     config_path.touch()
     runpod_http.side_effect = [httpx.Response(200, json=pod_data)]
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario(pilot):
         """Read the warning the first q opens, then answer it with the same key."""

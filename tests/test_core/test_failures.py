@@ -2,11 +2,11 @@ from unittest.mock import call
 
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed
-from galloc.core import services, storage
-from galloc.core.exceptions import GPUCreationPending
-from galloc.core.validators import prepare_creation, prepare_instance_operation
-from galloc.providers.exceptions import CreationRejected
+from gripper.api_clients.exceptions import APIRequestFailed
+from gripper.core import services, storage
+from gripper.core.exceptions import GPUCreationPending
+from gripper.core.validators import prepare_creation, prepare_instance_operation
+from gripper.providers.exceptions import CreationRejected
 
 
 @pytest.mark.parametrize("failure", [APIRequestFailed("Create timed out."), KeyboardInterrupt()])

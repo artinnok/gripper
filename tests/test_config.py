@@ -4,9 +4,26 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from galloc.config import save_config, save_config_value
-from galloc.exceptions import InvalidConfig
-from galloc.settings import load_settings
+from gripper.config import data_directory, save_config, save_config_value
+from gripper.exceptions import InvalidConfig
+from gripper.settings import load_settings
+
+
+@pytest.mark.parametrize("legacy_file", ["config.toml", "state.db"])
+def test_upgrade_reuses_existing_data_directory(tmp_path, legacy_file):
+    """Use existing credentials and deadlines together until the user configures the new directory."""
+
+    current = tmp_path / ".gripper"
+    legacy = tmp_path / ".galloc"
+    assert data_directory(tmp_path) == current
+
+    current.mkdir()
+    legacy.mkdir()
+    (legacy / legacy_file).touch()
+    assert data_directory(tmp_path) == legacy
+
+    (current / "config.toml").touch()
+    assert data_directory(tmp_path) == current
 
 
 @pytest.mark.parametrize("provider_name", ["runpod", "vast", "lambda"])

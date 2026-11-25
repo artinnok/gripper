@@ -2,11 +2,11 @@ import httpx
 from pydantic import SecretStr
 from textual.widgets import DataTable, Input, Link, Static
 
-from galloc.settings import load_settings
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.provider.list import ProviderListScreen
+from gripper.settings import load_settings
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.provider.list import ProviderListScreen
 from tests.test_tui.conftest import run_app, settle
 
 
@@ -46,7 +46,7 @@ def test_api_key_is_checked_saved_and_used_without_restart(settings, config_path
         assert pilot.app.settings.vast_api_key.get_secret_value() == "entered-vast-key"
         assert pilot.app.settings.provider == "runpod"
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     (check_call,) = vast_http.call_args_list
     assert check_call.args[0].headers["Authorization"] == "Bearer entered-vast-key"
@@ -82,7 +82,7 @@ def test_refused_api_key_stays_editable_and_saves_nothing(settings, config_path,
         await pilot.press("escape")
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert config_path.read_text() == SAVED_CONFIG
 
@@ -108,7 +108,7 @@ def test_default_provider_needs_a_key_and_is_saved(settings, config_path, runpod
         await pilot.press("escape")
         assert "vast" in pilot.app.screen.query_one("#header", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert load_settings(config_path).provider == "vast"
     assert config_path.read_text().startswith("# my notes\n")

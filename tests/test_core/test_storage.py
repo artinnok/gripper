@@ -4,8 +4,8 @@ from uuid import uuid4
 
 import pytest
 
-from galloc.core import storage
-from galloc.core.exceptions import GPUNotFound
+from gripper.core import storage
+from gripper.core.exceptions import GPUNotFound
 
 
 def test_only_mapping_and_deadline_survive_reopening(tmp_path, gpu):

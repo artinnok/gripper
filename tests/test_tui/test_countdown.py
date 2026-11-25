@@ -6,9 +6,9 @@ import pytest
 from rich.text import Text
 from textual.widgets import DataTable
 
-from galloc.core.schemas import GPU
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_details import format_time_left
+from gripper.core.schemas import GPU
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_details import format_time_left
 from tests.test_tui.conftest import run_app
 
 
@@ -56,8 +56,8 @@ def test_countdown_ticks_without_reading_the_provider(settings, config_path, run
         assert Text.from_markup(table.get_cell(gpu.name, "LEFT")).plain == "9m 59s"
         assert table.cursor_coordinate == cursor
 
-    with patch("galloc.tui.gpu_list.datetime") as clock:
+    with patch("gripper.tui.gpu_list.datetime") as clock:
         clock.now.return_value = gpu.expires_at - timedelta(minutes=10)
-        run_app(GallocApp(settings, config_path), scenario)
+        run_app(GripperApp(settings, config_path), scenario)
 
     runpod_http.assert_called_once()

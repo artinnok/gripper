@@ -5,9 +5,9 @@ from datetime import timedelta
 import httpx
 from textual.widgets import DataTable, Input, Static
 
-from galloc.core import storage
-from galloc.tui.app import GallocApp
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.tui.app import GripperApp
+from gripper.tui.message import Message
 from tests.test_tui.conftest import run_app, settle
 
 
@@ -33,7 +33,7 @@ def test_list_shows_live_status_beside_details(settings, config_path, runpod_htt
         await settle(pilot)
         assert "$2.50/hour" in pilot.app.screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert runpod_http.call_count == 2
 
 
@@ -52,7 +52,7 @@ def test_extend_adds_time_to_the_saved_deadline(settings, config_path, runpod_ht
         await settle(pilot)
         assert not pilot.app.screen.query_one(Input).display
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu(connection, gpu.id).expires_at == gpu.expires_at + timedelta(hours=1)
@@ -96,7 +96,7 @@ def test_delete_runs_only_after_confirmation(settings, config_path, runpod_http,
         await pilot.press("q", "escape")
         assert "extend" not in keys.content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert runpod_http.call_args_list[-1].args[0].method == "DELETE"
     with storage.open_database(settings.database_path) as connection:
@@ -119,7 +119,7 @@ def test_provider_failure_keeps_the_mapping(settings, config_path, runpod_http, 
         await pilot.press("down")
         assert message.content == ""
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu_list(connection) == [gpu]
@@ -159,7 +159,7 @@ def test_failed_refresh_hides_stale_status_and_can_reload(settings, config_path,
         assert "delete" in keys.content
         assert " SSH" in keys.content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_superseded_refresh_failure_does_not_replace_newer_result(settings, config_path, runpod_http, gpu, pod_data):
@@ -198,4 +198,4 @@ def test_superseded_refresh_failure_does_not_replace_newer_result(settings, conf
         assert pilot.app.screen.query_one(DataTable).row_count == 1
         assert pilot.app.screen.query_one(Message).content == ""
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)

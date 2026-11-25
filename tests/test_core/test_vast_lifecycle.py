@@ -6,14 +6,14 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
-from galloc.core import services, storage
-from galloc.core.validators import prepare_creation, prepare_extension
-from galloc.providers.exceptions import CreationRejected
-from galloc.providers.factory import open_provider
-from galloc.providers.vast.provider import VastProvider
-from galloc.settings import Settings
-from galloc.tui.expiration import delete_expired_gpu_list
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from gripper.core import services, storage
+from gripper.core.validators import prepare_creation, prepare_extension
+from gripper.providers.exceptions import CreationRejected
+from gripper.providers.factory import open_provider
+from gripper.providers.vast.provider import VastProvider
+from gripper.settings import Settings
+from gripper.tui.expiration import delete_expired_gpu_list
 
 
 def test_creation_saves_id_before_polling_and_expiration_retries(

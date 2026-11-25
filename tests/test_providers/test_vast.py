@@ -4,10 +4,10 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from galloc.api_clients.exceptions import InvalidAPIResponse
-from galloc.providers.exceptions import GPUUnavailable, InvalidGPU, InvalidRegion
-from galloc.providers.schemas import InstanceStatus
-from galloc.providers.vast.provider import VastProvider
+from gripper.api_clients.exceptions import InvalidAPIResponse
+from gripper.providers.exceptions import GPUUnavailable, InvalidGPU, InvalidRegion
+from gripper.providers.schemas import InstanceStatus
+from gripper.providers.vast.provider import VastProvider
 
 
 def test_catalog_pages_through_every_model_and_keeps_its_cheapest_offer(make_vast_client, vast_offer_data):

@@ -6,12 +6,12 @@ import httpx
 import pytest
 from textual.widgets import Input
 
-from galloc.core.ssh_keys import read_public_key
-from galloc.settings import load_settings
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.setup import SetupScreen, SetupStep
+from gripper.core.ssh_keys import read_public_key
+from gripper.settings import load_settings
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.setup import SetupScreen, SetupStep
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
@@ -49,7 +49,7 @@ def test_first_launch_registers_an_existing_key_and_saves_configuration(settings
         assert pilot.app.settings.runpod_api_key.get_secret_value() == "entered-token"
         assert pilot.app.settings.disk_gb == 100
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     check_call, read_call, write_call = runpod_http.call_args_list
     assert check_call.args[0].headers["Authorization"] == "Bearer entered-token"
@@ -89,11 +89,11 @@ def test_first_launch_can_generate_a_new_key(settings, config_path, runpod_http,
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
-    generated_key = read_public_key(home / ".ssh" / "galloc_ed25519.pub")
+    generated_key = read_public_key(home / ".ssh" / "gripper_ed25519.pub")
     assert registered_key_list == [generated_key.public_key]
-    assert (home / ".ssh" / "galloc_ed25519").exists()
+    assert (home / ".ssh" / "gripper_ed25519").exists()
 
 
 def test_refused_api_key_keeps_setup_open_and_saves_nothing(settings, config_path, runpod_http):
@@ -114,7 +114,7 @@ def test_refused_api_key_keeps_setup_open_and_saves_nothing(settings, config_pat
         assert "401" in pilot.app.screen.query_one(Message).content
         assert not pilot.app.screen.query_one(Input).disabled
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert not config_path.exists()
 
@@ -127,7 +127,7 @@ def test_cancelled_setup_saves_nothing(settings, config_path, runpod_http):
 
         await pilot.press("escape")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert not config_path.exists()
     runpod_http.assert_not_called()
@@ -161,7 +161,7 @@ def test_custom_key_path_and_disk_are_shared_with_cli(settings, config_path, run
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert pilot.app.settings.disk_gb == 64
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     saved_settings = load_settings(config_path)
     assert saved_settings.disk_gb == saved_settings.runpod_disk_gb == 64
     assert "ssh_public_key" not in config_path.read_text()
@@ -188,6 +188,6 @@ def test_cancelling_after_credentials_does_not_register_keys(settings, config_pa
         assert pilot.app.screen.step == step
         await pilot.press("ctrl+c")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert not config_path.exists()
     assert runpod_http.call_count == 1

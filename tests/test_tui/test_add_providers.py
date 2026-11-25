@@ -6,11 +6,11 @@ import httpx
 from pydantic import SecretStr
 from textual.widgets import DataTable, Input, OptionList, Static
 
-from galloc.core import storage
-from galloc.settings import Settings
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.settings import Settings
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
 from tests.conftest import make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 
@@ -64,7 +64,7 @@ def test_catalog_lists_every_provider_and_creates_at_the_chosen_one(
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert pilot.app.screen.query_one(DataTable).row_count == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     runpod_http.assert_called_once()
     with storage.open_database(settings.database_path) as connection:
@@ -128,7 +128,7 @@ def test_lambda_catalog_to_ready_gpu(settings, config_path, lambda_http, lambda_
         assert pilot.app.screen.query_one(DataTable).row_count == 1
         assert "ubuntu@192.0.2.2" in pilot.app.screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_failed_provider_keeps_the_other_providers_offers(
@@ -157,7 +157,7 @@ def test_failed_provider_keeps_the_other_providers_offers(
         assert info.render_line(1).text.split() == ["vast", "ready"]
         assert "runpod" in message and "500" in message
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_each_provider_is_shown_as_soon_as_it_answers(settings, config_path, runpod_http, vast_http, vast_offer_data):
@@ -204,7 +204,7 @@ def test_each_provider_is_shown_as_soon_as_it_answers(settings, config_path, run
         assert (choice.highlighted, "RTX A4000" in choice.get_option_at_index(2).prompt) == (2, True)
         assert info.render_line(1).text.split() == ["vast", "ready"]
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     runpod_http.assert_called_once()
 
@@ -224,7 +224,7 @@ def test_catalog_without_any_api_key_points_to_providers(tmp_path, config_path, 
         assert pilot.app.screen.query_one("#choice", OptionList).option_count == 0
         assert "No provider has an API key" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     runpod_http.assert_not_called()
     vast_http.assert_not_called()

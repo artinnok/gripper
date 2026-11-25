@@ -2,7 +2,7 @@ import json
 
 import httpx
 
-from galloc.main import cli
+from gripper.main import cli
 from tests.conftest import SSH_FINGERPRINT, SSH_PUBLIC_KEY
 
 
@@ -39,7 +39,7 @@ def test_lambda_cli_lifecycle(runner, config_path, database_path, lambda_entry, 
         elif path == "/api/v1/instance-operations/launch":
             assert request.method == "POST"
             payload = json.loads(request.content)
-            assert payload.pop("name").startswith("galloc-")
+            assert payload.pop("name").startswith("gripper-")
             assert payload == {
                 "instance_type_name": "gpu_8x_h100",
                 "region_name": "us-west-1",

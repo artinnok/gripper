@@ -4,15 +4,15 @@ from uuid import uuid4
 
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed
-from galloc.core import services, storage
-from galloc.core.exceptions import GPUConflict, GPUNotFound, InvalidTTL
-from galloc.core.validators import (
+from gripper.api_clients.exceptions import APIRequestFailed
+from gripper.core import services, storage
+from gripper.core.exceptions import GPUConflict, GPUNotFound, InvalidTTL
+from gripper.core.validators import (
     prepare_creation,
     prepare_extension,
     prepare_instance_operation,
 )
-from galloc.providers.exceptions import InvalidGPU, InvalidRegion
+from gripper.providers.exceptions import InvalidGPU, InvalidRegion
 
 
 def test_creation_preparation_resolves_inputs_without_saving(connection, provider, creation_arguments):

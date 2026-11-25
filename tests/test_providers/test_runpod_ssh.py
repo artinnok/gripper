@@ -1,6 +1,6 @@
 import pytest
 
-from galloc.providers.runpod.ssh import parse_ssh_command
+from gripper.providers.runpod.ssh import parse_ssh_command
 
 
 @pytest.mark.parametrize(

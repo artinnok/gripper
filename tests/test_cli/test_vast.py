@@ -2,8 +2,8 @@ import json
 
 import httpx
 
-from galloc.main import cli
-from galloc.settings import load_settings
+from gripper.main import cli
+from gripper.settings import load_settings
 
 
 def test_vast_only_configuration_and_cli_lifecycle(

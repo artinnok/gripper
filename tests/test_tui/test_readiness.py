@@ -7,11 +7,11 @@ import pytest
 from rich.spinner import Spinner
 from textual.widgets import DataTable, Static
 
-from galloc.core import storage
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.startup import StartupScreen
+from gripper.core import storage
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.startup import StartupScreen
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
 
@@ -51,7 +51,7 @@ def test_startup_shows_spinner_until_runtime_and_ssh_are_ready(settings, config_
         assert "gpu-1 ready" in pilot.app.screen.query_one(Message).content
         assert "ssh root@" in pilot.app.screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert sum(call.args[0].method == "POST" for call in runpod_http.call_args_list) == 1
 
 
@@ -83,7 +83,7 @@ def test_startup_failure_keeps_mapping_and_shows_error(settings, config_path, ru
         assert "gpu-1:" in pilot.app.screen.query_one(Message).content
         assert not pilot.app.screen.query_one("#startup", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu(connection, "gpu-1").provider_instance_id == pod_data["id"]
     assert sum(call.args[0].method == "POST" for call in runpod_http.call_args_list) == 1
@@ -95,7 +95,7 @@ def test_startup_timeout_uses_configured_limit(settings, config_path, runpod_htt
 
     config_path.touch()
     settings.startup_timeout = 1
-    monkeypatch.setattr("galloc.core.readiness.monotonic", Mock(side_effect=[0, 2]))
+    monkeypatch.setattr("gripper.core.readiness.monotonic", Mock(side_effect=[0, 2]))
     runpod_http.side_effect = lambda request: serve_catalog(request, pod_data | {"runtime": None})
 
     async def scenario(pilot):
@@ -105,7 +105,7 @@ def test_startup_timeout_uses_configured_limit(settings, config_path, runpod_htt
         await settle(pilot)
         assert "not ready after 1 seconds" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu(connection, "gpu-1").provider_instance_id == pod_data["id"]
 
@@ -137,7 +137,7 @@ def test_escape_stops_waiting_without_deleting_gpu(settings, config_path, runpod
         assert pilot.app.screen.query_one(DataTable).row_count == 1
         assert "stopped waiting" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu(connection, "gpu-1").provider_instance_id == pod_data["id"]
     assert all(call.args[0].method != "DELETE" for call in runpod_http.call_args_list)

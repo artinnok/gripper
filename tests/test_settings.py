@@ -3,8 +3,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from galloc.main import cli
-from galloc.settings import Settings, load_settings
+from gripper.main import cli
+from gripper.settings import Settings, load_settings
 
 
 @pytest.mark.parametrize("source", ["environment", "dotenv"])
@@ -14,12 +14,12 @@ def test_legacy_sources_do_not_configure_application(tmp_path, monkeypatch, conf
 
     monkeypatch.chdir(tmp_path)
     legacy_values = {
-        "GALLOC_PROVIDER": "unknown",
-        "GALLOC_RUNPOD_API_KEY": "legacy-token",
-        "GALLOC_API_TIMEOUT": "invalid-timeout",
-        "GALLOC_DISK_GB": "0",
-        "GALLOC_RUNPOD_DISK_GB": "0",
-        "GALLOC_DEBUG": "true",
+        "GRIPPER_PROVIDER": "unknown",
+        "GRIPPER_RUNPOD_API_KEY": "legacy-token",
+        "GRIPPER_API_TIMEOUT": "invalid-timeout",
+        "GRIPPER_DISK_GB": "0",
+        "GRIPPER_RUNPOD_DISK_GB": "0",
+        "GRIPPER_DEBUG": "true",
     }
     if source == "environment":
         for name, value in legacy_values.items():

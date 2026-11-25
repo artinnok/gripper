@@ -1,6 +1,6 @@
 import pytest
 
-from galloc.main import cli
+from gripper.main import cli
 from tests.test_cli.conftest import TerminalInput
 
 
@@ -35,5 +35,5 @@ def test_add_help_points_to_tui(runner, runpod_http):
     result = runner.invoke(cli, ["add", "--help"])
 
     assert result.exit_code == 0
-    assert "Run galloc without a command for interactive selection." in result.stdout
+    assert "Run gripper without a command for interactive selection." in result.stdout
     runpod_http.assert_not_called()

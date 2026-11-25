@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.main import cli
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.main import cli
 from tests.conftest import make_gpu_data
 from tests.test_cli.conftest import CREATION_TIME
 
@@ -31,7 +31,7 @@ def test_add_waits_for_runtime_and_ssh(
     """Wait through incomplete startup signals, then show readiness without persisting its status."""
 
     sleep = AsyncMock()
-    monkeypatch.setattr("galloc.core.readiness.sleep", sleep)
+    monkeypatch.setattr("gripper.core.readiness.sleep", sleep)
     runpod_http.side_effect = [
         *creation_response_list,
         httpx.Response(200, json=pod_data | {"status": "STARTING"}),
@@ -68,8 +68,8 @@ def test_startup_failure_keeps_resource_visible(
 
     assert result.exit_code == 1
     assert "Error:" in result.stderr
-    assert "galloc get gpu-1" in result.stderr
-    assert "galloc rm gpu-1" in result.stderr
+    assert "gripper get gpu-1" in result.stderr
+    assert "gripper rm gpu-1" in result.stderr
     assert runpod_http.call_count == 4
     with storage.open_database(database_path) as connection:
         assert storage.get_gpu(connection, "gpu-1").provider_instance_id == pod_data["id"]
@@ -84,8 +84,8 @@ def test_interrupted_wait_preserves_gpu(runner, runpod_http, creation_response_l
 
     assert result.exit_code == 1
     assert result.stdout == ""
-    assert "galloc get gpu-1" in result.stderr
-    assert "galloc rm gpu-1" in result.stderr
+    assert "gripper get gpu-1" in result.stderr
+    assert "gripper rm gpu-1" in result.stderr
     assert runpod_http.call_count == 4
     with storage.open_database(database_path) as connection:
         gpu = storage.get_gpu(connection, "gpu-1")
@@ -96,12 +96,12 @@ def test_startup_timeout(runner, runpod_http, creation_response_list, pod_data, 
     """Bound the wait while preserving the running resource for explicit follow-up."""
 
     write_config(defaults={"startup_timeout": 1})
-    monkeypatch.setattr("galloc.core.readiness.monotonic", Mock(side_effect=[0, 2]))
+    monkeypatch.setattr("gripper.core.readiness.monotonic", Mock(side_effect=[0, 2]))
     runpod_http.side_effect = [*creation_response_list, httpx.Response(200, json=pod_data | {"runtime": None})]
 
     result = runner.invoke(cli, ["add", "--gpu", "H200", "--region", "US-KS-2", "--ttl", "30m"])
 
     assert result.exit_code == 1
     assert "not ready after 1 seconds" in result.stderr
-    assert "galloc rm gpu-1" in result.stderr
+    assert "gripper rm gpu-1" in result.stderr
     assert runpod_http.call_count == 4

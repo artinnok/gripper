@@ -6,9 +6,9 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from galloc.api_clients.lambda_.client import LambdaAPIClient
-from galloc.api_clients.runpod.client import RunpodAPIClient
-from galloc.api_clients.vast.client import VastAPIClient
+from gripper.api_clients.lambda_.client import LambdaAPIClient
+from gripper.api_clients.runpod.client import RunpodAPIClient
+from gripper.api_clients.vast.client import VastAPIClient
 
 
 SSH_PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK92FXWTQiQNcZl6wr0NXAR5/GYDsK7fdNzTm5qGLWZd laptop"
@@ -22,7 +22,7 @@ def config_path(tmp_path, monkeypatch):
     """Keep settings away from the user's configuration file."""
 
     config_path = tmp_path / "config.toml"
-    monkeypatch.setattr("galloc.main.CONFIG_PATH", config_path)
+    monkeypatch.setattr("gripper.main.CONFIG_PATH", config_path)
     return config_path
 
 
@@ -189,7 +189,7 @@ def lambda_http(monkeypatch):
 
         return LambdaAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
 
-    monkeypatch.setattr("galloc.providers.factory.LambdaAPIClient", make_client)
+    monkeypatch.setattr("gripper.providers.factory.LambdaAPIClient", make_client)
     return handler
 
 
@@ -220,5 +220,5 @@ def vast_http(monkeypatch):
 
         return VastAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
 
-    monkeypatch.setattr("galloc.providers.factory.VastAPIClient", make_client)
+    monkeypatch.setattr("gripper.providers.factory.VastAPIClient", make_client)
     return handler

@@ -7,9 +7,9 @@ import httpx
 import pytest
 from textual.widgets import DataTable, Static
 
-from galloc.core import storage
-from galloc.tui.app import GallocApp
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.tui.app import GripperApp
+from gripper.tui.message import Message
 from tests.conftest import make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 
@@ -35,7 +35,7 @@ def test_startup_removes_overdue_gpus(settings, config_path, expired_gpu, pod_da
         assert pilot.app.screen.query_one(DataTable).row_count == 0
         assert "TTL: deleted gpu-1" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu_list(connection) == []
     assert sum(call.args[0].method == "DELETE" for call in runpod_http.call_args_list) == 1
@@ -48,7 +48,7 @@ def test_deadline_is_enforced_while_other_screens_or_prompts_are_open(
     """Keep TTL processing active in the add flow, extension prompt, and exit confirmation."""
 
     config_path.touch()
-    monkeypatch.setattr("galloc.tui.app.TTL_CHECK_INTERVAL", 0.05)
+    monkeypatch.setattr("gripper.tui.app.TTL_CHECK_INTERVAL", 0.05)
 
     def handler(request):
         """Serve screen reads and confirm the only automatic deletion."""
@@ -78,7 +78,7 @@ def test_deadline_is_enforced_while_other_screens_or_prompts_are_open(
         assert pilot.app.return_code is None
         assert pilot.app.gpu_screen.query_one(DataTable).row_count == 0
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert sum(call.args[0].method == "DELETE" for call in runpod_http.call_args_list) == 1
 
 
@@ -109,7 +109,7 @@ def test_failed_expiration_is_visible_and_retried(settings, config_path, expired
         await settle(pilot)
         assert pilot.app.screen.query_one(DataTable).row_count == 0
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_confirmed_exit_finishes_only_the_submitted_deletion(settings, config_path, expired_gpu, pod_data, runpod_http):
@@ -131,7 +131,7 @@ def test_confirmed_exit_finishes_only_the_submitted_deletion(settings, config_pa
         return httpx.Response(200, json=pod_data)
 
     runpod_http.side_effect = handler
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario():
         """Confirm exit before releasing the request that is already in flight."""

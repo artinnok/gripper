@@ -1,8 +1,8 @@
 [project]
-name = "galloc"
+name = "gripper"
 version = "0.1.0"
 description = "GPU instances with a TTL, managed from a local CLI."
-readme = "README.md"
+readme = { text = "Gripper manages cloud GPUs and their TTL from your terminal. Run `gripper` for the interactive interface or `gripper --help` for CLI commands.", content-type = "text/markdown" }
 requires-python = ">=3.15"
 license = "Apache-2.0"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-galloc = "galloc.main:cli"
+gripper = "gripper.main:cli"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14"]

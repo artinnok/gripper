@@ -1,0 +1,59 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
+from gripper.api_clients.lambda_.client import LambdaAPIClient
+from gripper.api_clients.runpod.client import RunpodAPIClient
+from gripper.api_clients.vast.client import VastAPIClient
+from gripper.core.ssh_keys import configured_key_path
+from gripper.providers.base import Provider
+from gripper.providers.exceptions import UnsupportedProvider
+from gripper.providers.lambda_.provider import LambdaProvider
+from gripper.providers.runpod.provider import RunpodProvider
+from gripper.providers.schemas import ProviderName
+from gripper.providers.vast.provider import VastProvider
+from gripper.settings import Settings
+
+
+PROVIDER_NAME_LIST = tuple(provider.value for provider in ProviderName)
+
+
+@contextmanager
+def open_provider(settings: Settings, name: str) -> Iterator[Provider]:
+    """Build the selected adapter from settings and close its HTTP client after use."""
+
+    if name == ProviderName.LAMBDA:
+        with LambdaAPIClient(
+            settings.lambda_api_key, base_url=settings.lambda_api_url, timeout=settings.api_timeout
+        ) as client:
+            yield LambdaProvider(
+                client,
+                disk_gb=settings.lambda_disk_gb or settings.disk_gb,
+                public_key_path=configured_key_path(settings, name),
+                timeout=settings.api_timeout,
+                poll_interval=settings.startup_poll_interval,
+            )
+        return
+
+    if name == ProviderName.VAST:
+        with VastAPIClient(
+            settings.vast_api_key, base_url=settings.vast_api_url, timeout=settings.api_timeout
+        ) as client:
+            yield VastProvider(client, image=settings.vast_image, disk_gb=settings.vast_disk_gb or settings.disk_gb)
+        return
+
+    if name != ProviderName.RUNPOD:
+        raise UnsupportedProvider(f"Unsupported provider: {name}.")
+
+    with RunpodAPIClient(
+        settings.runpod_api_key, base_url=settings.runpod_api_url, timeout=settings.api_timeout
+    ) as api_client:
+        yield RunpodProvider(
+            api_client, image=settings.runpod_image, disk_gb=settings.runpod_disk_gb or settings.disk_gb
+        )
+
+
+def is_configured(settings: Settings, provider_name: str) -> bool:
+    """Report whether the provider has a non-empty API key."""
+
+    api_key = getattr(settings, f"{provider_name}_api_key")
+    return api_key is not None and bool(api_key.get_secret_value().strip())

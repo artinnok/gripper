@@ -3,8 +3,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from galloc.core import storage
-from galloc.main import cli
+from gripper.core import storage
+from gripper.main import cli
 
 
 @pytest.mark.parametrize(

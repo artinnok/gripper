@@ -3,8 +3,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from galloc.core.exceptions import InvalidTTL
-from galloc.core.ttl import calculate_expires_at, parse_ttl
+from gripper.core.exceptions import InvalidTTL
+from gripper.core.ttl import calculate_expires_at, parse_ttl
 
 
 @pytest.mark.parametrize(

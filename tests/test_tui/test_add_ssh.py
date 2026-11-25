@@ -4,14 +4,14 @@ import httpx
 import pytest
 from textual.widgets import Input, OptionList, Static
 
-from galloc.core.ssh_keys import generate_key_pair, read_public_key
-from galloc.settings import load_settings
-from galloc.tui.add import AddScreen
-from galloc.tui.add_steps import AddStep
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.ssh_key.add import SSHKeyAddScreen
+from gripper.core.ssh_keys import generate_key_pair, read_public_key
+from gripper.settings import load_settings
+from gripper.tui.add import AddScreen
+from gripper.tui.add_steps import AddStep
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.ssh_key.add import SSHKeyAddScreen
 from tests.conftest import SSH_PUBLIC_KEY, make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
@@ -27,7 +27,7 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
     with config_path.open("a") as config_file:
         config_file.write('\n[providers.vast]\napi_key = "vast-token"\n')
     settings = load_settings(config_path)
-    private_path = home / ".ssh" / "galloc_ed25519"
+    private_path = home / ".ssh" / "gripper_ed25519"
     if source == "custom":
         private_path = home / "custom keys" / "vast identity"
     expected_ssh_arguments = ["ssh", "-i", str(private_path), "root@ssh1.vast.ai", "-p", "12345"]
@@ -95,7 +95,7 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
         ssh_session.assert_awaited_once_with(expected_ssh_arguments)
         assert "-i " in pilot.app.screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     saved = load_settings(config_path)
     assert saved.vast_ssh_public_key == public_path
     assert saved.runpod_ssh_public_key is None
@@ -117,7 +117,7 @@ def test_ssh_setup_precedes_vast_rental_and_remembers_the_identity(
         assert isinstance(pilot.app.screen, AddScreen)
         assert pilot.app.screen.step == AddStep.REGION
 
-    run_app(GallocApp(saved, config_path), restart)
+    run_app(GripperApp(saved, config_path), restart)
     assert len(registered_key_list) == 1
     assert sum(call.args[0].method == "PUT" for call in vast_http.call_args_list) == 1
 
@@ -157,5 +157,5 @@ def test_skipping_ssh_requires_a_registered_local_pair(
             assert pilot.app.screen.step == AddStep.GPU
             assert not pilot.app.screen.query_one("#choice", OptionList).disabled
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)

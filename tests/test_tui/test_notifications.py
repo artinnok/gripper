@@ -2,9 +2,9 @@ import asyncio
 
 from textual.widgets import Static
 
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
 from tests.test_tui.conftest import settle
 from tests.test_tui.test_add import serve_catalog
 
@@ -14,7 +14,7 @@ def test_ctrl_c_confirms_exit_in_the_detail_column(settings, config_path, runpod
 
     config_path.touch()
     runpod_http.side_effect = lambda request: serve_catalog(request, pod_data)
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario():
         """Press Ctrl+C on the dashboard and on the region step shown in the report."""
@@ -48,7 +48,7 @@ def test_ctrl_c_confirms_exit_in_the_detail_column(settings, config_path, runpod
 def test_notifications_use_inline_status_during_setup(settings, config_path):
     """Preserve notification text, titles, and errors without a popup during first launch."""
 
-    app = GallocApp(settings, config_path)
+    app = GripperApp(settings, config_path)
 
     async def scenario():
         """Send formatted and literal notifications through the application event handler."""

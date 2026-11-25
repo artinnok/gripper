@@ -4,11 +4,11 @@ import httpx
 import pytest
 from textual.widgets import Input, OptionList, Static
 
-from galloc.core import storage
-from galloc.tui.add import AddScreen
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.tui.add import AddScreen
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
 from tests.conftest import make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
@@ -82,7 +82,7 @@ def test_unavailable_gpu_restarts_add_from_scratch(
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     creation_request_list = [call.args[0] for call in runpod_http.call_args_list if call.args[0].method == "POST"]
     assert len(creation_request_list) == (2 if stage == "creation" else 1)
     assert json.loads(creation_request_list[-1].content)["gpu"]["id"] == "NVIDIA H200"
@@ -118,4 +118,4 @@ def test_empty_catalog_after_refusal_waits_for_manual_refresh(settings, config_p
         await settle(pilot)
         assert screen.query_one("#choice", OptionList).option_count == 1
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)

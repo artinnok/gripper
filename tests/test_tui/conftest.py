@@ -9,15 +9,15 @@ import pytest
 from pydantic import SecretStr
 from textual.pilot import Pilot
 
-from galloc.api_clients.runpod.client import RunpodAPIClient
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.core.ssh_keys import generate_key_pair, read_public_key
-from galloc.settings import Settings
-from galloc.tui.app import GallocApp
+from gripper.api_clients.runpod.client import RunpodAPIClient
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.core.ssh_keys import generate_key_pair, read_public_key
+from gripper.settings import Settings
+from gripper.tui.app import GripperApp
 
 
-def run_app(app: GallocApp, scenario) -> None:
+def run_app(app: GripperApp, scenario) -> None:
     """Drive the real application headlessly through one test scenario."""
 
     async def run_scenario():
@@ -68,7 +68,7 @@ def runpod_http(monkeypatch):
 
         return RunpodAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
 
-    monkeypatch.setattr("galloc.providers.factory.RunpodAPIClient", make_client)
+    monkeypatch.setattr("gripper.providers.factory.RunpodAPIClient", make_client)
     return handler
 
 
@@ -129,6 +129,6 @@ def ssh_session(monkeypatch):
     """Give headless tests an SSH client without opening a terminal or a network connection."""
 
     run_ssh = AsyncMock(return_value=0)
-    monkeypatch.setattr(GallocApp, "suspend", lambda app: nullcontext())
-    monkeypatch.setattr("galloc.tui.gpu_list.run_ssh", run_ssh)
+    monkeypatch.setattr(GripperApp, "suspend", lambda app: nullcontext())
+    monkeypatch.setattr("gripper.tui.gpu_list.run_ssh", run_ssh)
     return run_ssh

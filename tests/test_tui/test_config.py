@@ -2,8 +2,8 @@ import json
 
 from textual.widgets import Static
 
-from galloc.settings import load_settings
-from galloc.tui.app import GallocApp
+from gripper.settings import load_settings
+from gripper.tui.app import GripperApp
 from tests.conftest import SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
@@ -27,7 +27,7 @@ def test_creation_uses_shared_disk_and_registers_no_key(config_path, write_confi
         await settle(pilot)
         assert f"ssh -i {home / 'provider'} root@" in pilot.app.screen.query_one("#info", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     request_list = [call.args[0] for call in runpod_http.call_args_list]
     (pod_request,) = [request for request in request_list if request.method == "POST"]
     assert json.loads(pod_request.content)["disk"] == 100

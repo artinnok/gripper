@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from galloc.main import cli
+from gripper.main import cli
 from tests.test_tui.test_add import serve_catalog
 
 

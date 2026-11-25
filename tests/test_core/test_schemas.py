@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from galloc.core.schemas import GPU
+from gripper.core.schemas import GPU
 
 
 def test_gpu_normalizes_timestamps():

@@ -1,7 +1,7 @@
 import httpx
 
-from galloc.core import storage
-from galloc.main import cli
+from gripper.core import storage
+from gripper.main import cli
 from tests.conftest import make_gpu_data
 
 
@@ -26,7 +26,7 @@ def test_uncertain_creation_directs_to_provider(runner, runpod_http, database_pa
         (gpu,) = storage.get_gpu_list(connection)
     assert gpu.provider_instance_id is None
     assert gpu.name in result.stderr
-    assert f"Check galloc-{gpu.id} in the runpod console." in result.stderr
+    assert f"Check gripper-{gpu.id} in the runpod console." in result.stderr
     request_list = [arguments.args for arguments in runpod_http.call_args_list]
     assert [request.method for (request,) in request_list] == ["GET", "GET", "POST"]
 
@@ -41,5 +41,5 @@ def test_delete_requires_known_provider_id(runner, runpod_http, gpu, database_pa
     result = runner.invoke(cli, ["rm", str(gpu.id), "--yes"])
 
     assert result.exit_code == 1
-    assert f"Check galloc-{gpu.id} in the runpod console." in result.stderr
+    assert f"Check gripper-{gpu.id} in the runpod console." in result.stderr
     runpod_http.assert_not_called()

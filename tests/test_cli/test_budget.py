@@ -3,9 +3,9 @@ from datetime import timedelta
 import httpx
 import pytest
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.main import cli
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.main import cli
 from tests.conftest import make_gpu_data
 from tests.test_cli.conftest import CREATION_TIME, TerminalInput
 

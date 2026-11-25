@@ -4,12 +4,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from galloc.core.schemas import GPU
-from galloc.core.storage import open_database
-from galloc.core.validators import prepare_creation
-from galloc.providers.base import Provider
-from galloc.providers.schemas import Instance, InstanceStatus
-from galloc.providers.ssh import SSHConnection
+from gripper.core.schemas import GPU
+from gripper.core.storage import open_database
+from gripper.core.validators import prepare_creation
+from gripper.providers.base import Provider
+from gripper.providers.schemas import Instance, InstanceStatus
+from gripper.providers.ssh import SSHConnection
 
 
 @pytest.fixture

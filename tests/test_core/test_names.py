@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from galloc.core import storage
+from gripper.core import storage
 
 
 def test_names_are_not_reused_after_refused_creation(tmp_path, gpu):

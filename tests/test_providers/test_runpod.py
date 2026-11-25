@@ -5,10 +5,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
-from galloc.providers.exceptions import CreationRejected, InvalidGPU, InvalidRegion
-from galloc.providers.runpod.provider import RunpodProvider
-from galloc.providers.schemas import InstanceStatus
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from gripper.providers.exceptions import CreationRejected, InvalidGPU, InvalidRegion
+from gripper.providers.runpod.provider import RunpodProvider
+from gripper.providers.schemas import InstanceStatus
 from tests.conftest import make_gpu_data
 
 
@@ -17,7 +17,7 @@ def test_create_maps_catalog_and_tracks_owned_resource(make_runpod_client, pod_d
     """Create one named Pod in the requested location without separate volumes."""
 
     gpu_id = uuid4()
-    pod_data.update(name=f"galloc-{gpu_id}", status="PROVISIONING", dataCenterId=None)
+    pod_data.update(name=f"gripper-{gpu_id}", status="PROVISIONING", dataCenterId=None)
     request_list = []
 
     def handler(request):
@@ -44,7 +44,7 @@ def test_create_maps_catalog_and_tracks_owned_resource(make_runpod_client, pod_d
 
     _, _, creation_request = request_list
     assert json.loads(creation_request.content) == {
-        "name": f"galloc-{gpu_id}",
+        "name": f"gripper-{gpu_id}",
         "image": "example/image:1",
         "cloud": "SECURE",
         "gpu": {"id": "NVIDIA H200", "count": 1},
@@ -198,7 +198,7 @@ def test_get_missing_pod_returns_none(make_runpod_client):
     """Translate a missing resource into the provider's absence result."""
 
     def handler(request):
-        """Report an instance that was removed outside galloc."""
+        """Report an instance that was removed outside gripper."""
 
         return httpx.Response(404)
 

@@ -3,9 +3,9 @@ from decimal import Decimal
 
 import pytest
 
-from galloc.core.exceptions import InvalidBudget
-from galloc.core.pricing import calculate_budget_ttl, calculate_cost, parse_budget
-from galloc.core.ttl import parse_ttl
+from gripper.core.exceptions import InvalidBudget
+from gripper.core.pricing import calculate_budget_ttl, calculate_cost, parse_budget
+from gripper.core.ttl import parse_ttl
 
 
 @pytest.mark.parametrize("value", ["5", "12.50", "0.01"])

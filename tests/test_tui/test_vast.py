@@ -6,13 +6,13 @@ import pytest
 from pydantic import SecretStr
 from textual.widgets import DataTable, Input, OptionList
 
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.settings import Settings, load_settings
-from galloc.tui.add import AddScreen
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.settings import Settings, load_settings
+from gripper.tui.add import AddScreen
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
 from tests.conftest import SSH_PUBLIC_KEY
 from tests.test_tui.conftest import run_app, settle
 
@@ -42,7 +42,7 @@ def test_vast_setup_uses_its_credentials_and_shared_defaults(settings, config_pa
         assert isinstance(pilot.app.screen, GPUListScreen)
         assert pilot.app.settings.provider == "vast"
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     saved = load_settings(config_path)
     assert saved.provider == "vast"
     assert saved.disk_gb == saved.vast_disk_gb == 80
@@ -77,7 +77,7 @@ def test_vast_setup_rejects_invalid_credentials(settings, config_path, vast_http
         assert not pilot.app.screen.query_one(Input).disabled
         assert not config_path.exists()
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 @pytest.mark.parametrize("budget", [False, True])
@@ -88,7 +88,7 @@ def test_vast_add_and_deadline_on_another_screen(
 
     config_path.touch()
     settings = Settings(provider="vast", vast_api_key=SecretStr("vast-token"), database_path=tmp_path / "state.db")
-    monkeypatch.setattr("galloc.tui.app.TTL_CHECK_INTERVAL", 0.05)
+    monkeypatch.setattr("gripper.tui.app.TTL_CHECK_INTERVAL", 0.05)
     deleted = False
 
     def handler(request):
@@ -142,7 +142,7 @@ def test_vast_add_and_deadline_on_another_screen(
         with storage.open_database(settings.database_path) as connection:
             assert storage.get_gpu_list(connection) == []
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
 
 def test_failure_before_the_rental_request_returns_to_gpu_selection(
@@ -187,7 +187,7 @@ def test_failure_before_the_rental_request_returns_to_gpu_selection(
         assert screen.query_one("#choice", OptionList).option_count == 1
         assert "invalid response to POST /api/v0/bundles/ (offers.0.gpu_name" in screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     with storage.open_database(settings.database_path) as connection:
         assert storage.get_gpu_list(connection) == []
 
@@ -225,6 +225,6 @@ def test_startup_expires_both_providers(
             assert storage.get_gpu_list(connection) == []
         assert pilot.app.screen.query_one(DataTable).row_count == 0
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     for handler in (runpod_http, vast_http):
         assert sum(call.args[0].method == "DELETE" for call in handler.call_args_list) == 1

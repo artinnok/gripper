@@ -4,7 +4,7 @@ import logging
 import httpx
 import pytest
 
-from galloc.main import cli
+from gripper.main import cli
 
 
 @pytest.mark.parametrize("mode", ["default", "flag", "config"])
@@ -67,7 +67,7 @@ def test_debug_preserves_json_and_does_not_leak_between_invocations(runner, runp
 def test_failed_command_restores_logging_before_next_invocation(runner, runpod_http):
     """Release the debug handler after an error and avoid leaking it into the next command."""
 
-    logger = logging.getLogger("galloc")
+    logger = logging.getLogger("gripper")
     original_handlers = logger.handlers[:]
     original_level, original_propagate = logger.level, logger.propagate
     runpod_http.side_effect = [

@@ -4,7 +4,7 @@ import threading
 import pytest
 from textual.widgets import Input, Static
 
-from galloc.tui.app import GallocApp
+from gripper.tui.app import GripperApp
 from tests.test_tui.conftest import run_app, settle
 from tests.test_tui.test_add import serve_catalog
 
@@ -53,5 +53,5 @@ def test_typing_during_catalog_loading_does_not_enter_the_limit(
         await pilot.press("enter", "enter", "1", "h")
         assert "about $5.29" in pilot.app.screen.query_one("#preview", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)

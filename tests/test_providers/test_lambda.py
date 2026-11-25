@@ -8,14 +8,14 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from galloc.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
-from galloc.core import storage
-from galloc.core.schemas import GPU
-from galloc.exceptions import InvalidSSHKey
-from galloc.providers.exceptions import GPUUnavailable
-from galloc.providers.factory import open_provider
-from galloc.settings import Settings
-from galloc.tui.expiration import delete_expired_gpu_list
+from gripper.api_clients.exceptions import APIRequestFailed, InvalidAPIResponse
+from gripper.core import storage
+from gripper.core.schemas import GPU
+from gripper.exceptions import InvalidSSHKey
+from gripper.providers.exceptions import GPUUnavailable
+from gripper.providers.factory import open_provider
+from gripper.settings import Settings
+from gripper.tui.expiration import delete_expired_gpu_list
 from tests.conftest import OTHER_SSH_PUBLIC_KEY, SSH_PUBLIC_KEY
 
 
@@ -141,7 +141,7 @@ def test_termination_retries_wait_without_resubmitting_and_redacts_notebook_urls
         success(machine),
         success(machine | {"status": "terminated"}),
     ]
-    caplog.set_level(logging.DEBUG, logger="galloc.api_clients.diagnostics")
+    caplog.set_level(logging.DEBUG, logger="gripper.api_clients.diagnostics")
     with open_provider(settings, "lambda") as provider:
         with pytest.raises(APIRequestFailed):
             provider.delete("instance1")

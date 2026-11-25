@@ -7,10 +7,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from galloc.core import storage
-from galloc.core.exceptions import GPUNotFound
-from galloc.tui import expiration, operations
-from galloc.tui.expiration import delete_expired_gpu_list
+from gripper.core import storage
+from gripper.core.exceptions import GPUNotFound
+from gripper.tui import expiration, operations
+from gripper.tui.expiration import delete_expired_gpu_list
 
 
 @pytest.mark.parametrize("failure_status", [403, 500])

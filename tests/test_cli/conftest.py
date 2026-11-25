@@ -6,9 +6,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from galloc.api_clients.runpod.client import RunpodAPIClient
-from galloc.core import storage
-from galloc.core.schemas import GPU
+from gripper.api_clients.runpod.client import RunpodAPIClient
+from gripper.core import storage
+from gripper.core.schemas import GPU
 from tests.conftest import SSH_PUBLIC_KEY
 
 
@@ -48,7 +48,7 @@ def runpod_http(monkeypatch):
 
         return RunpodAPIClient(api_key, base_url=base_url, timeout=timeout, transport=httpx.MockTransport(handler))
 
-    monkeypatch.setattr("galloc.providers.factory.RunpodAPIClient", make_client)
+    monkeypatch.setattr("gripper.providers.factory.RunpodAPIClient", make_client)
     return handler
 
 
@@ -83,7 +83,7 @@ def creation_clock(monkeypatch):
 
             return CREATION_TIME.astimezone(tz)
 
-    monkeypatch.setattr("galloc.core.validators.datetime", CreationClock)
+    monkeypatch.setattr("gripper.core.validators.datetime", CreationClock)
 
 
 @pytest.fixture

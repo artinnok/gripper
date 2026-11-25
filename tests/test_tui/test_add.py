@@ -7,12 +7,12 @@ import httpx
 import pytest
 from textual.widgets import DataTable, Input, OptionList, Static
 
-from galloc.core import storage
-from galloc.tui.add import AddScreen
-from galloc.tui.app import GallocApp
-from galloc.tui.gpu_list import GPUListScreen
-from galloc.tui.message import Message
-from galloc.tui.startup import StartupScreen
+from gripper.core import storage
+from gripper.tui.add import AddScreen
+from gripper.tui.app import GripperApp
+from gripper.tui.gpu_list import GPUListScreen
+from gripper.tui.message import Message
+from gripper.tui.startup import StartupScreen
 from tests.conftest import make_gpu_data
 from tests.test_tui.conftest import run_app, settle
 
@@ -49,7 +49,7 @@ def test_empty_list_shows_the_key_that_adds_a_gpu(settings, config_path, runpod_
 
         assert "add" in pilot.app.screen.query_one("#keys", Static).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     runpod_http.assert_not_called()
 
 
@@ -87,7 +87,7 @@ def test_add_creates_the_chosen_gpu_and_shows_it_in_the_list(settings, config_pa
         assert pilot.app.screen.query_one(DataTable).row_count == 1
         assert "gpu-1 ready" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     (creation_request,) = [call.args[0] for call in runpod_http.call_args_list if call.args[0].method == "POST"]
     payload = json.loads(creation_request.content)
@@ -117,7 +117,7 @@ def test_invalid_ttl_keeps_the_add_screen_open(settings, config_path, runpod_htt
         assert isinstance(pilot.app.screen, AddScreen)
         assert "Use a positive TTL" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
@@ -157,7 +157,7 @@ def test_refresh_replaces_the_catalog_and_marks_cheap_gpus(settings, config_path
         assert "RTX 2000 Ada" in cheap and "$0.39" in cheap and "ϟ" in cheap
         assert regular.index("$") == cheap.index("$")
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert runpod_http.call_count == 2
 
 
@@ -189,7 +189,7 @@ def test_failed_catalog_refresh_can_be_retried(settings, config_path, runpod_htt
         assert not choice.disabled
         assert pilot.app.screen.query_one(Message).content == ""
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert runpod_http.call_count == 3
 
 
@@ -219,7 +219,7 @@ def test_unresolved_creation_names_the_pod_to_check(settings, config_path, runpo
 
         assert "is unresolved" in pilot.app.screen.query_one(Message).content
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     with storage.open_database(settings.database_path) as connection:
         (gpu,) = storage.get_gpu_list(connection)
@@ -251,7 +251,7 @@ def test_add_closed_during_a_catalog_read_changes_nothing(settings, config_path,
 
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     runpod_http.assert_called_once()
 
@@ -286,7 +286,7 @@ def test_quitting_during_creation_saves_the_returned_instance(settings, config_p
         finally:
             answer_allowed.set()
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     with storage.open_database(settings.database_path) as connection:
         (gpu,) = storage.get_gpu_list(connection)
@@ -327,7 +327,7 @@ def test_fractional_budget_previews_ttl_and_recalculates_before_creation(
         await settle(pilot)
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
 
     with storage.open_database(settings.database_path) as connection:
         (gpu,) = storage.get_gpu_list(connection)
@@ -356,7 +356,7 @@ def test_invalid_budget_keeps_input_editable(settings, config_path, runpod_http,
         assert pilot.app.screen.query_one(Message).content
         assert not pilot.app.screen.query_one("#limit", Input).disabled
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
 
@@ -403,7 +403,7 @@ def test_escape_returns_to_the_previous_step(settings, config_path, runpod_http,
         await pilot.press("escape")
         assert isinstance(pilot.app.screen, GPUListScreen)
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
     assert all(call.args[0].method == "GET" for call in runpod_http.call_args_list)
 
 
@@ -447,4 +447,4 @@ def test_escape_while_regions_load_returns_to_gpu_selection(settings, config_pat
         assert not screen.query_one("#choice", OptionList).disabled
         assert screen.query_one("#columns", Static).content.split()[0] == "GPU"
 
-    run_app(GallocApp(settings, config_path), scenario)
+    run_app(GripperApp(settings, config_path), scenario)
